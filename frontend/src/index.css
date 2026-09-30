@@ -1,0 +1,6 @@
+/* Tema ve genel stiller App.css'te. Bu dosya kasıtlı olarak boş bırakıldı. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
