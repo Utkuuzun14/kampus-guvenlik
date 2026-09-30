@@ -79,3 +79,64 @@ body {
   font-weight: 700;
   font-size: 0.8rem;
 }
+
+.baslik-ust {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.durum {
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.ozet {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.kart {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+
+.kart-sayi {
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.kart-sayi-kucuk {
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kart-etiket {
+  color: #94a3b8;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.kritik-kart {
+  border: 1px solid #ef4444;
+}
+
+.yuksek-kart {
+  border: 1px solid #f87171;
+}
+
+@media (max-width: 640px) {
+  .ozet {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
