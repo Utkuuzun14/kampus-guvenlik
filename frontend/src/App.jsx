@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
+import DumanGrafik from "./DumanGrafik";
 
 const API = "http://127.0.0.1:8000";
 const WS_URL = "ws://127.0.0.1:8000/ws";
@@ -135,6 +136,8 @@ function App() {
           <div className="kart-etiket">Son Olay</div>
         </div>
       </div>
+
+      <DumanGrafik />
 
       <div className="olay-bolum">
         <h2>Son Olaylar</h2>

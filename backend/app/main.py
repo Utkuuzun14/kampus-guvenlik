@@ -92,6 +92,11 @@ def durum():
     }
 
 
+@app.get("/api/gecmis")
+def gecmis(sensor: str = "duman", dugum: str = "dugum1", limit: int = 50):
+    return veritabani.sensor_gecmis_getir(sensor, dugum, limit)
+
+
 @app.websocket("/ws")
 async def ws_ucu(ws: WebSocket):
     await yonetici.baglan(ws)

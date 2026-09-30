@@ -82,3 +82,15 @@ def son_olaylar(limit=50):
             "SELECT * FROM olaylar ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
     return [dict(s) for s in satirlar]
+
+
+def sensor_gecmis_getir(sensor, dugum="dugum1", limit=50):
+    """Belirli bir sensörün son ham okumalarını döndürür (eski -> yeni)."""
+    with baglanti() as conn:
+        satirlar = conn.execute(
+            "SELECT * FROM sensor_gecmis WHERE sensor = ? AND dugum = ? "
+            "ORDER BY id DESC LIMIT ?",
+            (sensor, dugum, limit),
+        ).fetchall()
+    # En son 'limit' kaydı aldık; grafik için eski->yeni sırala
+    return [dict(s) for s in reversed(satirlar)]

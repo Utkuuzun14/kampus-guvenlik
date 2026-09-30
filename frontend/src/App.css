@@ -140,3 +140,18 @@ body {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+.grafik-bolum {
+  margin-bottom: 24px;
+}
+
+.grafik-bolum h2 {
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+}
+
+.grafik-kutu {
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 16px 8px 8px;
+}
