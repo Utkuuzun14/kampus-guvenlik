@@ -1,6 +1,6 @@
 # Test Sonuçları (Rapor Tablo 6)
 
-Test tarihi: (otomatik test scripti ile)
+Test tarihi: 4 Ekim 2026, 11:16 (otomatik test scripti ile)
 Yöntem: scripts/test_senaryolari.py — her senaryo broker'a kontrollü mesaj 
 gönderir, backend API'sinden sonuç doğrulanır.
 Ortam: Mosquitto broker + FastAPI backend + SQLite (sahte üreteç kapalı).
