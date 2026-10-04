@@ -17,6 +17,8 @@ function App() {
   const [olaylar, setOlaylar] = useState([]);
   const [hata, setHata] = useState(null);
   const [baglanti, setBaglanti] = useState("baglaniyor"); // canli | kopuk | baglaniyor
+  const [durum, setDurum] = useState(null);
+  const [filtre, setFiltre] = useState("hepsi");
   const wsRef = useRef(null);
   const yenidenBaglanRef = useRef(null);
 
@@ -30,6 +32,15 @@ function App() {
       setHata(null);
     } catch (e) {
       setHata(e.message);
+    }
+  };
+
+  const durumGetir = async () => {
+    try {
+      const cevap = await fetch(`${API}/api/durum`);
+      if (cevap.ok) setDurum(await cevap.json());
+    } catch (e) {
+      // sessiz geç
     }
   };
 
@@ -73,10 +84,13 @@ function App() {
 
   useEffect(() => {
     olaylariGetir();
+    durumGetir();
+    const durumZaman = setInterval(durumGetir, 5000);
     const kapatildiRef = { value: false };
     wsBaglan(kapatildiRef);
     return () => {
       kapatildiRef.value = true;
+      clearInterval(durumZaman);
       if (yenidenBaglanRef.current) clearTimeout(yenidenBaglanRef.current);
       if (wsRef.current) wsRef.current.close();
     };
@@ -110,6 +124,22 @@ function App() {
         <span className="alt">IoT Tabanlı Güvenlik İzleme Sistemi</span>
       </header>
 
+      {durum && (
+        <div className="durum-cubuk">
+          <span
+            className="durum-nokta"
+            style={{ color: durum.cevrimici ? "#4ade80" : "#ef4444" }}
+          >
+            ●
+          </span>
+          <span>
+            dugum1 — {durum.cevrimici ? "Çevrimiçi" : "Çevrimdışı"}
+            {durum.gecen_saniye != null &&
+              ` (son veri ${durum.gecen_saniye} sn önce)`}
+          </span>
+        </div>
+      )}
+
       {hata && (
         <div className="hata">
           Backend'e bağlanılamadı ({hata}). Broker ve backend çalışıyor mu?
@@ -140,7 +170,20 @@ function App() {
       <DumanGrafik />
 
       <div className="olay-bolum">
-        <h2>Son Olaylar</h2>
+        <div className="olay-ustbar">
+          <h2>Son Olaylar</h2>
+          <div className="filtreler">
+            {["hepsi", "kritik", "yuksek", "orta", "uyari", "bilgi"].map((f) => (
+              <button
+                key={f}
+                className={filtre === f ? "filtre-btn aktif" : "filtre-btn"}
+                onClick={() => setFiltre(f)}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
         <table className="olay-tablo">
           <thead>
             <tr>
@@ -158,7 +201,7 @@ function App() {
                 <td colSpan="6" className="bos">Henüz olay yok.</td>
               </tr>
             )}
-            {olaylar.map((o, i) => (
+            {olaylar.filter((o) => filtre === "hepsi" || o.seviye === filtre).map((o, i) => (
               <tr key={o.id ?? i}>
                 <td>{zamanBicim(o.zaman)}</td>
                 <td>{o.dugum}</td>

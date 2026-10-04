@@ -155,3 +155,55 @@ body {
   border-radius: 10px;
   padding: 16px 8px 8px;
 }
+
+.durum-cubuk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1e293b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.durum-nokta {
+  font-size: 1.1rem;
+}
+
+.olay-ustbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.olay-ustbar h2 {
+  margin: 0;
+}
+
+.filtreler {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filtre-btn {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.filtre-btn.aktif {
+  background: #38bdf8;
+  color: #0f172a;
+  font-weight: 700;
+  border-color: #38bdf8;
+}

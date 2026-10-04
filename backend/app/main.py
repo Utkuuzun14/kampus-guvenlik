@@ -85,10 +85,25 @@ def olaylar(limit: int = 50):
 
 @app.get("/api/durum")
 def durum():
+    """Düğüm durumu: son olay, çevrimiçi mi, son görülme."""
+    import time as _t
     son = veritabani.son_olaylar(1)
+    son_olay = son[0] if son else None
+    # Son veri zamanı (sensor_gecmis'ten en güncel kayıt)
+    son_veri = veritabani.sensor_gecmis_getir("duman", "dugum1", 1)
+    son_zaman = son_veri[-1]["zaman"] if son_veri else None
+    simdi = int(_t.time())
+    cevrimici = False
+    gecen_sn = None
+    if son_zaman:
+        gecen_sn = simdi - son_zaman
+        cevrimici = gecen_sn <= config.CEVRIMDISI_SANIYE
     return {
-        "son_olay": son[0] if son else None,
+        "son_olay": son_olay,
         "esik_duman": config.ESIK_DUMAN,
+        "cevrimici": cevrimici,
+        "son_gorulme": son_zaman,
+        "gecen_saniye": gecen_sn,
     }
 
 
