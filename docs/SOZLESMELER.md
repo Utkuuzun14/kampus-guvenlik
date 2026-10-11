@@ -86,9 +86,9 @@ aşamasında güncellenebilir (yapılandırma dosyasından okunur).
 | Olay | Kaynak | Kural | Alarm seviyesi | Sistem tepkisi |
 |------|--------|-------|---------------|----------------|
 | Hareket | PIR | `deger == 1` | orta | Olay kaydı + panelde göster |
-| Duman/gaz | MQ-2 | `deger > ESIK_DUMAN` (varsayılan 1800) | yüksek | Olay kaydı + alarm konusu + e-posta |
+| Duman/gaz | MQ-2 | `deger > ESIK_DUMAN` (varsayılan 1800) | yuksek | Olay kaydı + alarm konusu + e-posta |
 | Alev | KY-026 | `deger == 1` | kritik | Olay kaydı + alarm konusu + e-posta (öncelikli) |
-| Cihaz çevrimdışı | ESP32 | `durum == "offline"` veya X sn mesaj yok | uyarı | Olay kaydı + panelde "çevrimdışı" işareti |
+| Cihaz çevrimdışı | ESP32 | `durum == "offline"` veya X sn mesaj yok | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
 
 Alarm seviyeleri: `bilgi < uyari < orta < yuksek < kritik`
 
