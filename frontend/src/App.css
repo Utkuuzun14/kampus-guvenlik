@@ -190,21 +190,32 @@ a:focus-visible {
   align-items: stretch;
 }
 
-/* Harita satırı: solda harita + olay akışı, sağda gösterge (2 satır boyunca).
-   Dar ekranda sıra: harita, gösterge (+ grafik), olay akışı. */
+/* Harita satırı: solda harita, sağda gösterge + olay akışı.
+   Sağ sütun satır yüksekliğini doldurur; olay akışı kalan alanı alıp
+   kendi içinde kayar, böylece iki sütun aynı hizada biter. */
 .harita-satiri {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    "harita gosterge"
-    "akis   gosterge";
   gap: 16px;
+  align-items: stretch;
 }
 
-.harita-satiri > .harita-kart { grid-area: harita; }
-.harita-satiri > .gosterge-kart { grid-area: gosterge; align-self: start; }
-.harita-satiri > .akis-kart { grid-area: akis; }
+.sag-sutun {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sag-sutun > .gosterge-kart { flex: none; }
+
+/* 200px: olay akışının satır yüksekliğine katkısı (en az ~3 olay görünür) */
+.sag-sutun > .akis-kart {
+  flex: 1 0 auto;
+  height: 200px;
+  min-height: 0;
+}
 
 /* ---------- Ortak kart ---------- */
 
@@ -1130,9 +1141,25 @@ a:focus-visible {
 
 /* ---------- Olay akışı ---------- */
 
-.akis-kart { gap: 4px; }
+.akis-kart { gap: 12px; }
 
-.akis-baslik { margin-bottom: 8px; }
+.akis-liste {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-right: -8px;
+  padding-right: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--kenar-belirgin) transparent;
+}
+
+.akis-liste::-webkit-scrollbar { width: 6px; }
+.akis-liste::-webkit-scrollbar-track { background: transparent; }
+.akis-liste::-webkit-scrollbar-thumb {
+  background: var(--kenar-belirgin);
+  border-radius: 999px;
+}
+.akis-liste::-webkit-scrollbar-thumb:hover { background: #33477a; }
 
 .akis-satir {
   display: flex;
@@ -1214,13 +1241,13 @@ a:focus-visible {
   .ozet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .satir-2 { grid-template-columns: minmax(0, 1fr); }
 
-  .harita-satiri {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto;
-    grid-template-areas: "harita" "gosterge" "akis";
-  }
+  .harita-satiri { grid-template-columns: minmax(0, 1fr); }
 
-  .harita-satiri > .gosterge-kart { align-self: stretch; }
+  .sag-sutun > .akis-kart {
+    flex: none;
+    height: auto;
+    max-height: 420px;
+  }
 }
 
 @media (max-width: 899px) {

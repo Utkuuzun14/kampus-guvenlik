@@ -247,8 +247,10 @@ function App() {
             onSec={setSeciliDugum}
             simdiSn={simdiSn}
           />
-          <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
-          <OlayAkisi olaylar={olaylar} />
+          <div className="sag-sutun">
+            <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
+            <OlayAkisi olaylar={olaylar} />
+          </div>
         </section>
 
         <section id="analitik" className="satir-2">

@@ -10,32 +10,37 @@ const detayYap = (o) => {
   return `${o.dugum} · ${konum ?? SENSOR_AD[o.sensor] ?? o.sensor}`;
 };
 
-// Son 5 olay, zaman çizelgesi biçiminde (olaylar yeni → eski)
+const GOSTERILEN = 20;
+
+// Son olaylar, zaman çizelgesi biçiminde (olaylar yeni → eski).
+// Liste kartın içinde dikey kayar.
 export default function OlayAkisi({ olaylar }) {
-  const son = olaylar.slice(0, 5);
+  const son = olaylar.slice(0, GOSTERILEN);
 
   return (
     <div className="kart panel-kart akis-kart">
-      <span className="bolum-baslik akis-baslik">Son olaylar</span>
-      {son.length === 0 && <span className="bolum-alt">Henüz olay yok.</span>}
-      {son.map((o, i) => {
-        const renk = SEVIYE_RENK[seviyeAnahtari(o.seviye)] ?? "#94a3b8";
-        return (
-          <div key={o.id ?? i} className="akis-satir">
-            <div className="akis-ray">
-              <span className="akis-nokta" style={{ "--renk": renk }} />
-              {i < son.length - 1 && <span className="akis-cizgi" />}
-            </div>
-            <div className="akis-icerik">
-              <div className="akis-ust">
-                <span className="akis-ad">{baslikYap(o.mesaj)}</span>
-                <span className="kucuk-mono">{saatBicim(o.zaman)}</span>
+      <span className="bolum-baslik">Son olaylar</span>
+      <div className="akis-liste">
+        {son.length === 0 && <span className="bolum-alt">Henüz olay yok.</span>}
+        {son.map((o, i) => {
+          const renk = SEVIYE_RENK[seviyeAnahtari(o.seviye)] ?? "#94a3b8";
+          return (
+            <div key={o.id ?? i} className="akis-satir">
+              <div className="akis-ray">
+                <span className="akis-nokta" style={{ "--renk": renk }} />
+                {i < son.length - 1 && <span className="akis-cizgi" />}
               </div>
-              <span className="bolum-alt">{detayYap(o)}</span>
+              <div className="akis-icerik">
+                <div className="akis-ust">
+                  <span className="akis-ad">{baslikYap(o.mesaj)}</span>
+                  <span className="kucuk-mono">{saatBicim(o.zaman)}</span>
+                </div>
+                <span className="bolum-alt">{detayYap(o)}</span>
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
