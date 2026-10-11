@@ -1,4 +1,4 @@
-import { DUGUM_KONUMLARI, YEDEK_KONUMLAR } from "../sabitler";
+import { DUGUM_KONUMLARI } from "../sabitler";
 
 const HUB = { x: 400, y: 220 }; // Mosquitto (krokide merkez)
 
@@ -23,21 +23,16 @@ const sureMetni = (sn) => {
   return `${Math.floor(sn / 3600)} sa önce`;
 };
 
-// Düğümleri krokideki konumlarıyla eşler (bilinmeyenler yedek noktalara)
-function konumlariEsle(dugumler) {
-  let yedek = 0;
-  return dugumler.map((d) => {
-    const bilinen = DUGUM_KONUMLARI[d.id];
-    if (bilinen) return { ...d, ...bilinen };
-    const nokta = YEDEK_KONUMLAR[yedek++ % YEDEK_KONUMLAR.length];
-    return { ...d, ...nokta, konum: "Konum tanımsız" };
-  });
-}
+// Yalnızca sabitler.js'de konumu tanımlı düğümler çizilir
+const konumluDugumler = (dugumler) =>
+  dugumler
+    .filter((d) => DUGUM_KONUMLARI[d.id])
+    .map((d) => ({ ...d, ...DUGUM_KONUMLARI[d.id] }));
 
 // dugumler: [{ id, cevrimici, duman, hareket, alev, sonZaman }]
 // alarmdakiler: son 5 dk'da kritik olayı olan düğüm id'leri (Set)
 export default function KampusHaritasi({ dugumler, alarmdakiler, secili, onSec, simdiSn }) {
-  const noktalar = konumlariEsle(dugumler).map((d) => ({
+  const noktalar = konumluDugumler(dugumler).map((d) => ({
     ...d,
     tip: alarmdakiler.has(d.id) ? "alarm" : d.cevrimici ? "ok" : "off",
     px: (d.x / 100) * 800,
@@ -132,7 +127,7 @@ export default function KampusHaritasi({ dugumler, alarmdakiler, secili, onSec, 
           })}
 
           {noktalar.length === 0 && (
-            <div className="harita-bos">Henüz veri gönderen düğüm yok</div>
+            <div className="harita-bos">Haritada konumu tanımlı düğüm yok</div>
           )}
         </div>
 

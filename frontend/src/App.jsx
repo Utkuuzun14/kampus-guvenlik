@@ -13,7 +13,9 @@ import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
 import useDugumler from "./hooks/useDugumler";
 import useDumanGecmis from "./hooks/useDumanGecmis";
-import { API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN } from "./sabitler";
+import {
+  API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, DUGUM_KONUMLARI,
+} from "./sabitler";
 import {
   seviyeAnahtari, olayKimligi, sonKritikOlay, tehditHesapla, pencereIcinde,
 } from "./hesaplar";
@@ -171,11 +173,13 @@ function App() {
       .filter((o) => seviyeAnahtari(o.seviye) === "kritik")
       .map((o) => o.dugum)
   );
+  // Gösterge ve harita detayı yalnızca haritadaki (konumu tanımlı) düğümler için.
   // Seçim yoksa: önce alarmdaki düğüm, yoksa ilk düğüm
+  const haritadakiler = dugumIdleri.filter((id) => DUGUM_KONUMLARI[id]);
   const gosterilenDugum =
-    (seciliDugum && dugumIdleri.includes(seciliDugum) && seciliDugum) ||
-    dugumIdleri.find((id) => alarmdakiler.has(id)) ||
-    dugumIdleri[0] ||
+    (seciliDugum && haritadakiler.includes(seciliDugum) && seciliDugum) ||
+    haritadakiler.find((id) => alarmdakiler.has(id)) ||
+    haritadakiler[0] ||
     null;
   const dumanVeri = useDumanGecmis(gosterilenDugum);
   const dumanSon60 = dumanVeri.filter((o) => simdiSn - o.zaman <= 60);

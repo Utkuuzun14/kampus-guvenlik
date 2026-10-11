@@ -47,16 +47,10 @@ export const SENSOR_KISA = {
 };
 
 // Düğüm → kampüs konumu. x/y: harita üzerindeki yüzde konum (800×440 kroki).
+// Burada olmayan düğümler haritaya çizilmez, yalnızca "Aktif düğüm" sayısına girer.
 export const DUGUM_KONUMLARI = {
   dugum1: { konum: "Mühendislik Fakültesi", x: 24.4, y: 28.4 },
   dugum2: { konum: "Kütüphane", x: 66.9, y: 27.3 },
   dugum3: { konum: "Yurtlar", x: 24.4, y: 75 },
 };
 
-// Sözlükte olmayan düğümler sırayla bu boş noktalara yerleştirilir
-export const YEDEK_KONUMLAR = [
-  { x: 88.75, y: 37 }, // Rektörlük
-  { x: 88.75, y: 77 }, // Yemekhane
-  { x: 65.6, y: 75 }, // Merkezi Park
-  { x: 24.4, y: 75 }, // Yurtlar (dugum3 yoksa)
-];
