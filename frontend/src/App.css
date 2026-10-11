@@ -190,15 +190,21 @@ a:focus-visible {
   align-items: stretch;
 }
 
-/* Harita satırı: harita oranını korur, kartlar kendi yüksekliğinde kalır */
-#harita.satir-2 { align-items: start; }
-
-.sag-sutun {
-  display: flex;
-  flex-direction: column;
+/* Harita satırı: solda harita + olay akışı, sağda gösterge (2 satır boyunca).
+   Dar ekranda sıra: harita, gösterge (+ grafik), olay akışı. */
+.harita-satiri {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "harita gosterge"
+    "akis   gosterge";
   gap: 16px;
-  min-width: 0;
 }
+
+.harita-satiri > .harita-kart { grid-area: harita; }
+.harita-satiri > .gosterge-kart { grid-area: gosterge; align-self: start; }
+.harita-satiri > .akis-kart { grid-area: akis; }
 
 /* ---------- Ortak kart ---------- */
 
@@ -1124,10 +1130,7 @@ a:focus-visible {
 
 /* ---------- Olay akışı ---------- */
 
-.akis-kart {
-  gap: 4px;
-  flex-grow: 1;
-}
+.akis-kart { gap: 4px; }
 
 .akis-baslik { margin-bottom: 8px; }
 
@@ -1210,6 +1213,14 @@ a:focus-visible {
 @media (max-width: 1279px) {
   .ozet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .satir-2 { grid-template-columns: minmax(0, 1fr); }
+
+  .harita-satiri {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: "harita" "gosterge" "akis";
+  }
+
+  .harita-satiri > .gosterge-kart { align-self: stretch; }
 }
 
 @media (max-width: 899px) {

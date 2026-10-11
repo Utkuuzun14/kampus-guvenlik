@@ -234,7 +234,7 @@ function App() {
 
         <VeriHatti durumlar={hatDurumlari} />
 
-        <section id="harita" className="satir-2">
+        <section id="harita" className="harita-satiri">
           <KampusHaritasi
             dugumler={dugumListesi}
             alarmdakiler={alarmdakiler}
@@ -242,10 +242,8 @@ function App() {
             onSec={setSeciliDugum}
             simdiSn={simdiSn}
           />
-          <div className="sag-sutun">
-            <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
-            <OlayAkisi olaylar={olaylar} />
-          </div>
+          <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
+          <OlayAkisi olaylar={olaylar} />
         </section>
 
         <section id="analitik" className="satir-2">
