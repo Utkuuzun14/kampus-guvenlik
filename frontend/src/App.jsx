@@ -1,37 +1,29 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
 import DumanGrafik from "./DumanGrafik";
+import SolMenu from "./components/SolMenu";
+import UstBar from "./components/UstBar";
+import AlarmBandi from "./components/AlarmBandi";
+import OzetKartlari from "./components/OzetKartlari";
+import VeriHatti from "./components/VeriHatti";
+import useDugumler from "./hooks/useDugumler";
+import { API, WS_URL, ESIK_DUMAN_VARSAYILAN } from "./sabitler";
+import {
+  seviyeAnahtari, olayKimligi, sonKritikOlay, tehditHesapla,
+} from "./hesaplar";
 
-const API = "http://127.0.0.1:8000";
-const WS_URL = "ws://127.0.0.1:8000/ws";
-
-// Seviye değerleri docs/SOZLESMELER.md'den: bilgi < uyari < orta < yuksek < kritik
-const BILINEN_SEVIYELER = ["bilgi", "uyari", "orta", "yuksek", "kritik"];
-
-// Türkçe karakterleri ASCII'ye çevirir ("yüksek" → "yuksek")
-const asciiye = (metin) =>
-  String(metin ?? "")
-    .toLocaleLowerCase("tr-TR")
-    .replace(/ü/g, "u")
-    .replace(/ı/g, "i")
-    .replace(/ö/g, "o")
-    .replace(/ş/g, "s")
-    .replace(/ğ/g, "g")
-    .replace(/ç/g, "c");
-
-const rozetSinifi = (seviye) => {
-  const anahtar = asciiye(seviye);
-  return BILINEN_SEVIYELER.includes(anahtar)
-    ? `rozet rozet-${anahtar}`
-    : "rozet rozet-bilinmeyen";
-};
+const ANALITIK_LIMIT = 1000;
 
 function App() {
   const [olaylar, setOlaylar] = useState([]);
+  const [analitik, setAnalitik] = useState([]); // ısı haritası, özet kartları vb. için geniş liste
   const [hata, setHata] = useState(null);
   const [baglanti, setBaglanti] = useState("baglaniyor"); // canli | kopuk | baglaniyor
   const [durum, setDurum] = useState(null);
+  const [apiDurum, setApiDurum] = useState("bekliyor"); // ok | hata | bekliyor
+  const [dbDurum, setDbDurum] = useState("bekliyor"); // ok | hata | bekliyor
   const [filtre, setFiltre] = useState("hepsi");
+  const [onaylananKimlik, setOnaylananKimlik] = useState(null);
   const [simdi, setSimdi] = useState(() => new Date());
   const wsRef = useRef(null);
   const yenidenBaglanRef = useRef(null);
@@ -44,8 +36,22 @@ function App() {
       const veri = await cevap.json();
       setOlaylar(veri);
       setHata(null);
+      setDbDurum("ok");
     } catch (e) {
       setHata(e.message);
+      setDbDurum("hata");
+    }
+  };
+
+  // Analitik için daha geniş olay listesi (dakikada bir yenilenir)
+  const analitikGetir = async () => {
+    try {
+      const cevap = await fetch(`${API}/api/olaylar?limit=${ANALITIK_LIMIT}`);
+      if (!cevap.ok) throw new Error("Sunucu hatası: " + cevap.status);
+      setAnalitik(await cevap.json());
+      setDbDurum("ok");
+    } catch {
+      setDbDurum("hata");
     }
   };
 
@@ -53,8 +59,17 @@ function App() {
     try {
       const cevap = await fetch(`${API}/api/durum`);
       if (cevap.ok) setDurum(await cevap.json());
-    } catch (e) {
+    } catch {
       // sessiz geç
+    }
+  };
+
+  const saglikGetir = async () => {
+    try {
+      const cevap = await fetch(`${API}/api/saglik`);
+      setApiDurum(cevap.ok ? "ok" : "hata");
+    } catch {
+      setApiDurum("hata");
     }
   };
 
@@ -71,6 +86,7 @@ function App() {
           const mesaj = JSON.parse(olay.data);
           if (mesaj.tip === "olay" && mesaj.veri) {
             setOlaylar((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, 50));
+            setAnalitik((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, ANALITIK_LIMIT));
           }
         } catch (e) {
           console.error("WS mesaj çözme hatası:", e);
@@ -91,26 +107,33 @@ function App() {
         setBaglanti("kopuk");
         ws.close();
       };
-    } catch (e) {
+    } catch {
       setBaglanti("kopuk");
     }
   };
 
   useEffect(() => {
     olaylariGetir();
+    analitikGetir();
     durumGetir();
-    const durumZaman = setInterval(durumGetir, 5000);
+    saglikGetir();
+    const durumZaman = setInterval(() => {
+      durumGetir();
+      saglikGetir();
+    }, 5000);
+    const analitikZaman = setInterval(analitikGetir, 60000);
     const kapatildiRef = { value: false };
     wsBaglan(kapatildiRef);
     return () => {
       kapatildiRef.value = true;
       clearInterval(durumZaman);
+      clearInterval(analitikZaman);
       if (yenidenBaglanRef.current) clearTimeout(yenidenBaglanRef.current);
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
 
-  // Üst bardaki canlı saat (yalnızca görünüm)
+  // Canlı saat (yalnızca görünüm; 5 dk'lık pencereler de buna göre kayar)
   useEffect(() => {
     const saatZaman = setInterval(() => setSimdi(new Date()), 1000);
     return () => clearInterval(saatZaman);
@@ -121,148 +144,146 @@ function App() {
     return new Date(unix * 1000).toLocaleString("tr-TR");
   };
 
-  // Özet sayılar
-  const kritikSayi = olaylar.filter((o) => o.seviye === "kritik").length;
-  const yuksekSayi = olaylar.filter((o) => o.seviye === "yuksek").length;
-  const sonOlay = olaylar[0] || null;
+  // ---- Türetilmiş görünüm verileri ----
+  const simdiSn = Math.floor(simdi.getTime() / 1000);
+  const kaynak = analitik.length >= olaylar.length ? analitik : olaylar;
+  const esik = durum?.esik_duman ?? ESIK_DUMAN_VARSAYILAN;
 
-  const baglantiEtiket = {
-    canli: { metin: "Canlı", sinif: "nokta-canli" },
-    kopuk: { metin: "Bağlantı yok", sinif: "nokta-kopuk" },
-    baglaniyor: { metin: "Bağlanıyor…", sinif: "nokta-baglaniyor" },
-  }[baglanti];
+  // Yalnızca backend'den görülen düğümler
+  const dugumIdleri = useMemo(() => {
+    const idler = new Set(kaynak.map((o) => o.dugum).filter(Boolean));
+    if (durum?.son_gorulme != null) idler.add("dugum1"); // /api/durum dugum1'e bakar
+    return [...idler].sort();
+  }, [kaynak, durum?.son_gorulme]);
+  const { dugumler, cevrimiciGecmis } = useDugumler(dugumIdleri);
+  const dugumListesi = dugumIdleri.map((id) => dugumler[id] ?? { id, cevrimici: false });
+  const dugumOzet = {
+    toplam: dugumListesi.length,
+    cevrimici: dugumListesi.filter((d) => d.cevrimici).length,
+    cevrimdisi: dugumListesi.filter((d) => !d.cevrimici).map((d) => d.id),
+  };
 
-  const saatMetni = simdi.toLocaleTimeString("tr-TR");
-  const tarihMetni = simdi.toLocaleDateString("tr-TR", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  const tehdit = tehditHesapla(kaynak, simdiSn, onaylananKimlik);
+  const kritikOlay = sonKritikOlay(kaynak, simdiSn);
+  const alarmGoster = kritikOlay && olayKimligi(kritikOlay) !== onaylananKimlik;
+
+  const brokerDurum = durum == null ? "bekliyor" : durum.cevrimici ? "ok" : "uyari";
+  const isiklar = [
+    {
+      ad: "Broker",
+      durum: brokerDurum,
+      not: brokerDurum === "uyari" ? "veri yok" : null,
+      ipucu: "Son 30 sn içinde düğümden veri geldi mi (dolaylı gösterge)",
+    },
+    { ad: "API", durum: apiDurum, ipucu: "/api/saglik" },
+    { ad: "Veritabanı", durum: dbDurum, ipucu: "/api/olaylar" },
+  ];
+
+  const hatDurumlari = {
+    esp: dugumOzet.toplam === 0 ? "bekliyor" : dugumOzet.cevrimici > 0 ? "ok" : "uyari",
+    mqtt: brokerDurum,
+    api: apiDurum,
+    db: dbDurum,
+    panel: baglanti === "canli" ? "ok" : baglanti === "kopuk" ? "hata" : "uyari",
+  };
+
+  const rozetSinifi = (seviye) => {
+    const anahtar = seviyeAnahtari(seviye);
+    return anahtar ? `rozet rozet-${anahtar}` : "rozet rozet-bilinmeyen";
+  };
 
   return (
-    <>
-      <header className="ustbar">
-        <div className="ustbar-sol">
-          <span className="ustbar-simge" aria-hidden="true">🛡️</span>
-          <h1>Kampüs Güvenlik Merkezi</h1>
-        </div>
-        <div className="ustbar-saat">
-          <span className="saat">{saatMetni}</span>
-          <span className="tarih">{tarihMetni}</span>
-        </div>
-        <div className="ustbar-sag">
-          <span className="baglanti">
-            <span className={`nokta ${baglantiEtiket.sinif}`} />
-            {baglantiEtiket.metin}
-          </span>
-        </div>
-      </header>
+    <div className="kabuk">
+      <SolMenu />
 
-      <main className="panel">
-        <div className="yerlesim">
-          {hata && (
-            <div className="hata">
-              Backend'e bağlanılamadı ({hata}). Broker ve backend çalışıyor mu?
-            </div>
-          )}
+      <div className="icerik">
+        <UstBar simdi={simdi} tehdit={tehdit} isiklar={isiklar} baglanti={baglanti} />
 
-          <section className="ozet">
-            <div className="kart ozet-kart toplam-kart">
-              <h2 className="kart-baslik">Toplam Olay</h2>
-              <div className="kart-sayi">{olaylar.length}</div>
-            </div>
-            <div className="kart ozet-kart kritik-kart">
-              <h2 className="kart-baslik">Kritik</h2>
-              <div className="kart-sayi">{kritikSayi}</div>
-            </div>
-            <div className="kart ozet-kart yuksek-kart">
-              <h2 className="kart-baslik">Yüksek</h2>
-              <div className="kart-sayi">{yuksekSayi}</div>
-            </div>
-            <div className="kart ozet-kart">
-              <h2 className="kart-baslik">Son Olay</h2>
-              <div className="kart-sayi-kucuk">
-                {sonOlay ? sonOlay.mesaj : "-"}
-              </div>
-            </div>
-          </section>
+        {alarmGoster && (
+          <AlarmBandi
+            olay={kritikOlay}
+            onOnayla={() => setOnaylananKimlik(olayKimligi(kritikOlay))}
+          />
+        )}
 
+        {hata && (
+          <div className="hata">
+            Backend'e bağlanılamadı ({hata}). Broker ve backend çalışıyor mu?
+          </div>
+        )}
+
+        <OzetKartlari
+          olaylar={kaynak}
+          simdi={simdi}
+          esik={esik}
+          dugumOzet={dugumOzet}
+          cevrimiciGecmis={cevrimiciGecmis}
+        />
+
+        <VeriHatti durumlar={hatDurumlari} />
+
+        {/* Geçici: B aşamasında harita + gösterge ile değişecek */}
+        <div id="harita">
           <DumanGrafik />
-
-          <section className="kart dugum-kart">
-            <h2 className="kart-baslik">Düğüm Durumu</h2>
-            {durum ? (
-              <div className="dugum-satir">
-                <span
-                  className={`nokta ${durum.cevrimici ? "nokta-canli" : "nokta-kopuk"}`}
-                />
-                <div className="dugum-bilgi">
-                  <span>
-                    <span className="dugum-ad">dugum1</span> —{" "}
-                    {durum.cevrimici ? "Çevrimiçi" : "Çevrimdışı"}
-                  </span>
-                  {durum.gecen_saniye != null && (
-                    <span className="dugum-alt">
-                      son veri <span className="mono">{durum.gecen_saniye}</span> sn önce
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="bekleniyor">Veri bekleniyor…</div>
-            )}
-          </section>
-
-          <section className="kart olay-bolum">
-            <div className="olay-ustbar">
-              <h2 className="kart-baslik">Son Olaylar</h2>
-              <div className="filtreler">
-                {["hepsi", "kritik", "yuksek", "orta", "uyari", "bilgi"].map((f) => (
-                  <button
-                    key={f}
-                    className={filtre === f ? "filtre-btn aktif" : "filtre-btn"}
-                    onClick={() => setFiltre(f)}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="tablo-sarmal">
-              <table className="olay-tablo">
-                <thead>
-                  <tr>
-                    <th>Zaman</th>
-                    <th>Düğüm</th>
-                    <th>Sensör</th>
-                    <th>Değer</th>
-                    <th>Seviye</th>
-                    <th>Mesaj</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {olaylar.length === 0 && (
-                    <tr>
-                      <td colSpan="6" className="bos">Henüz olay yok.</td>
-                    </tr>
-                  )}
-                  {olaylar.filter((o) => filtre === "hepsi" || o.seviye === filtre).map((o, i) => (
-                    <tr key={o.id ?? i}>
-                      <td className="mono">{zamanBicim(o.zaman)}</td>
-                      <td className="mono">{o.dugum}</td>
-                      <td>{o.sensor}</td>
-                      <td className="mono">{o.deger}</td>
-                      <td>
-                        <span className={rozetSinifi(o.seviye)}>{o.seviye}</span>
-                      </td>
-                      <td>{o.mesaj}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
         </div>
-      </main>
-    </>
+
+        {/* Geçici: C aşamasında OlayTablosu bileşenine taşınacak */}
+        <section id="olaylar" className="kart bolum olay-bolum">
+          <div className="olay-ustbar">
+            <span className="bolum-baslik">Son Olaylar</span>
+            <div className="filtreler">
+              {["hepsi", "kritik", "yuksek", "orta", "uyari", "bilgi"].map((f) => (
+                <button
+                  key={f}
+                  className={filtre === f ? "filtre-btn aktif" : "filtre-btn"}
+                  onClick={() => setFiltre(f)}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="tablo-sarmal">
+            <table className="olay-tablo">
+              <thead>
+                <tr>
+                  <th>Zaman</th>
+                  <th>Düğüm</th>
+                  <th>Sensör</th>
+                  <th>Değer</th>
+                  <th>Seviye</th>
+                  <th>Mesaj</th>
+                </tr>
+              </thead>
+              <tbody>
+                {olaylar.length === 0 && (
+                  <tr>
+                    <td colSpan="6" className="bos">Henüz olay yok.</td>
+                  </tr>
+                )}
+                {olaylar.filter((o) => filtre === "hepsi" || o.seviye === filtre).map((o, i) => (
+                  <tr key={o.id ?? i}>
+                    <td className="mono">{zamanBicim(o.zaman)}</td>
+                    <td className="mono">{o.dugum}</td>
+                    <td>{o.sensor}</td>
+                    <td className="mono">{o.deger}</td>
+                    <td>
+                      <span className={rozetSinifi(o.seviye)}>{o.seviye}</span>
+                    </td>
+                    <td>{o.mesaj}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer className="altbilgi">
+          <span>ESP32-S2 → MQTT (QoS 1, LWT) → Mosquitto → FastAPI → SQLite → React</span>
+          <span className="mono">kampus/guvenlik/#</span>
+        </footer>
+      </div>
+    </div>
   );
 }
 

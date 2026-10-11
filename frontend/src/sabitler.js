@@ -1,0 +1,46 @@
+// Panelin ortak sabitleri
+
+export const API = "http://127.0.0.1:8000";
+export const WS_URL = "ws://127.0.0.1:8000/ws";
+
+export const KURUM = "Samsun Üniversitesi · IoT Güvenlik";
+
+// backend/app/config.py varsayılanları (durum.esik_duman gelirse o kullanılır)
+export const ESIK_DUMAN_VARSAYILAN = 1800;
+export const CEVRIMDISI_SANIYE = 30;
+
+// Tehdit seviyesi ve alarm bandı için bakılan pencere
+export const TEHDIT_PENCERE_SN = 5 * 60;
+
+// docs/SOZLESMELER.md: bilgi < uyari < orta < yuksek < kritik
+export const SEVIYELER = ["bilgi", "uyari", "orta", "yuksek", "kritik"];
+
+export const SEVIYE_RENK = {
+  bilgi: "#60a5fa",
+  uyari: "#2dd4bf",
+  orta: "#facc15",
+  yuksek: "#fb923c",
+  kritik: "#fb7185",
+};
+
+export const SEVIYE_AD = {
+  bilgi: "Bilgi",
+  uyari: "Uyarı",
+  orta: "Orta",
+  yuksek: "Yüksek",
+  kritik: "Kritik",
+};
+
+export const SENSOR_AD = {
+  hareket: "PIR hareket sensörü",
+  duman: "MQ-2 duman sensörü",
+  alev: "Alev sensörü",
+  durum: "Durum",
+};
+
+// Düğüm → kampüs konumu. x/y: harita üzerindeki yüzde konum.
+export const DUGUM_KONUMLARI = {
+  dugum1: { konum: "Mühendislik Fakültesi", x: 24.4, y: 28.4 },
+  dugum2: { konum: "Kütüphane", x: 66.9, y: 27.3 },
+  dugum3: { konum: "Yurtlar", x: 24.4, y: 75 },
+};

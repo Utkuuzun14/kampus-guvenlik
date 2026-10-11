@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Komuta Merkezi</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#050912}
+a{color:#22d3ee}a:hover{color:#67e8f9}
+.zemin{background-color:#050912;background-image:radial-gradient(rgba(120,150,200,.09) 1px,transparent 1px);background-size:22px 22px}
+@keyframes yesil{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 14px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+@keyframes kirmizi{0%{box-shadow:0 0 0 0 rgba(244,63,94,.75)}70%{box-shadow:0 0 0 26px rgba(244,63,94,0)}100%{box-shadow:0 0 0 0 rgba(244,63,94,0)}}
+@keyframes yanip{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes tarama{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.n-yesil{animation:yesil 2.2s infinite}
+.n-kirmizi{animation:kirmizi 1.3s infinite}
+.n-gri{}
+.yanip{animation:yanip 1.1s infinite}
+.tarama{position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(244,63,94,.18),transparent);animation:tarama 2.6s linear infinite;pointer-events:none}
+tr.satir:hover td{background:#101a30}
+button:focus-visible,a:focus-visible{outline:2px solid #22d3ee;outline-offset:2px}
+.ikon:hover{background:#121d35}
+@keyframes akis{to{stroke-dashoffset:-28}}
+.akis{animation:akis 1s linear infinite}
+.akis-hizli{animation:akis .45s linear infinite}
+@keyframes kay{0%{left:0;opacity:0}15%{opacity:1}85%{opacity:1}100%{left:calc(100% - 8px);opacity:0}}
+.akan{position:absolute;top:-3px;width:8px;height:8px;border-radius:50%;background:#22d3ee;box-shadow:0 0 10px #22d3ee;animation:kay 1.8s linear infinite}
+@keyframes hub{0%,100%{r:26}50%{r:30}}
+.hub-halka{animation:hub 2.4s ease-in-out infinite}
+</style>
+</helmet>
+<div class="zemin" style="min-height: 100vh; color: #e6edf7; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; display: flex; flex-wrap: wrap;">
+
+<nav aria-label="Ana menü" style="flex: 1 0 76px; display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center; gap: 10px; padding: 18px 16px; box-sizing: border-box; background: rgba(8,13,26,.92); border-right: 1px solid #16213a;">
+<div style="width: 44px; height: 44px; border-radius: 12px; background: #22d3ee; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; box-shadow: 0 0 24px rgba(34,211,238,.45);">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#04202a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="M9 12l2 2 4-4"></path></svg>
+</div>
+<button type="button" aria-label="Panel" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(34,211,238,.4); background: rgba(34,211,238,.12); display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg></button>
+<button type="button" class="ikon" aria-label="Harita" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9bb8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg></button>
+<button type="button" class="ikon" aria-label="Olaylar" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9bb8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></button>
+<button type="button" class="ikon" aria-label="Analitik" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9bb8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></button>
+<button type="button" class="ikon" aria-label="Ayarlar" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b9bb8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+</nav>
+
+<div style="flex: 999 1 640px; min-width: 0; padding: 22px 28px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px; max-width: 1400px;">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px;">
+<div style="display: flex; flex-direction: column; gap: 4px;">
+<div style="font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #22d3ee; font-weight: 600;">Samsun Üniversitesi · IoT Güvenlik</div>
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -.5px;">Komuta Merkezi</h1>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+<div style="{{tehdit.kutu}}">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #8b9bb8;">Tehdit seviyesi</span>
+<span style="{{tehdit.metinStil}}">{{tehdit.metin}}</span>
+</div>
+<div style="display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 12px; background: rgba(12,19,36,.85); border: 1px solid #1a2540;">
+<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #a9b6cf;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #34d399; display: inline-block;"></span>Broker</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #a9b6cf;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #34d399; display: inline-block;"></span>API</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #a9b6cf;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #34d399; display: inline-block;"></span>Veritabanı</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #6ee7b7; font-weight: 600;"><span class="n-yesil" style="width: 7px; height: 7px; border-radius: 50%; background: #34d399; display: inline-block;"></span>Canlı</span>
+</div>
+<div style="padding: 8px 16px; border-radius: 12px; background: rgba(12,19,36,.85); border: 1px solid #1a2540; display: flex; flex-direction: column; align-items: flex-end;">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 600; line-height: 1.2;">{{saat}}</span>
+<span style="font-size: 12px; color: #8b9bb8;">{{tarih}}</span>
+</div>
+</div>
+</header>
+
+<sc-if value="{{showAlarm}}" hint-placeholder-val="{{ true }}">
+<div role="alert" style="position: relative; overflow: hidden; display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 14px; background: rgba(60,8,20,.75); border: 1px solid rgba(244,63,94,.6); box-shadow: 0 0 32px rgba(244,63,94,.22);">
+<div class="tarama"></div>
+<div style="width: 44px; height: 44px; border-radius: 12px; background: #f43f5e; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a0508" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14 0-5.5 3-7 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg></div>
+<div style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 280px; position: relative;">
+<div style="display: flex; align-items: center; gap: 10px;"><span class="yanip" style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: #fb7185;">● KRİTİK ALARM</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #fda4af;">00:18:42</span></div>
+<div style="font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 600; color: #ffe4e6;">Mühendislik Fakültesi'nde alev algılandı</div>
+<div style="font-size: 13px; color: #fecdd3;">dugum1 · Alev sensörü · Yetkililere e-posta bildirimi gönderildi</div>
+</div>
+<button type="button" onClick="{{dismiss}}" style="position: relative; min-height: 44px; padding: 0 20px; border-radius: 10px; border: none; background: #f43f5e; color: #1a0508; font-weight: 700; font-family: inherit; font-size: 14px; cursor: pointer;">Alarmı onayla</button>
+</div>
+</sc-if>
+
+<section aria-label="Özet" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px;">
+<sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+<div style="{{k.kart}}">
+<div style="display: flex; justify-content: space-between; align-items: flex-start;">
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8b9bb8;">{{k.etiket}}</span>
+<span style="{{k.trendStil}}">{{k.trend}}</span>
+</div>
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 10px;">
+<span style="{{k.sayiStil}}">{{k.sayi}}</span>
+<svg aria-hidden="true" width="96" height="34" viewBox="0 0 96 34" style="flex-shrink: 0;"><polyline fill="none" stroke="{{k.renk}}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="{{k.spark}}"></polyline></svg>
+</div>
+<span style="font-size: 13px; color: #8b9bb8;">{{k.alt}}</span>
+</div>
+</sc-for>
+</section>
+
+<section aria-label="Veri hattı" style="background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Veri hattı</span>
+<span style="font-size: 13px; color: #8b9bb8;">Sensörden panele uçtan uca akış</span>
+</div>
+<div style="overflow-x: auto;">
+<div style="min-width: 820px; display: flex; align-items: center; gap: 0;">
+<sc-for list="{{hat}}" as="s" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 12px; background: #0a1222; border: 1px solid #1a2540; flex-shrink: 0;">
+<div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(34,211,238,.1); border: 1px solid rgba(34,211,238,.3); display: flex; align-items: center; justify-content: center;">
+<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{s.d}}"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 1px;">
+<span style="font-size: 14px; font-weight: 600;">{{s.ad}}</span>
+<span style="font-size: 12px; color: #8b9bb8;">{{s.alt}}</span>
+</div>
+<span style="width: 7px; height: 7px; border-radius: 50%; background: #34d399; display: inline-block; margin-left: 4px;"></span>
+</div>
+<sc-if value="{{s.bag}}" hint-placeholder-val="{{ true }}">
+<div style="position: relative; flex: 1; min-width: 28px; height: 2px; background: #1a2540; margin: 0 6px;"><span class="akan"></span></div>
+</sc-if>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-wrap: wrap; gap: 16px; align-items: stretch;">
+<div style="flex: 999 1 600px; min-width: 0; background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Kampüs haritası</span>
+<span style="font-size: 13px; color: #8b9bb8;">Düğüme tıklayarak ayrıntıları gör</span>
+</div>
+<div style="display: flex; gap: 14px; font-size: 13px; color: #a9b6cf;">
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; background: #34d399; display: inline-block;"></span>Çevrimiçi</span>
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; background: #f43f5e; display: inline-block;"></span>Alarm</span>
+<span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; background: #64748b; display: inline-block;"></span>Çevrimdışı</span>
+</div>
+</div>
+<div style="position: relative; width: 100%; aspect-ratio: 800 / 440; border-radius: 12px; overflow: hidden; border: 1px solid #16213a;">
+<svg role="img" aria-label="Kampüs krokisi: Mühendislik Fakültesi, Kütüphane, Rektörlük, Yurtlar, Yemekhane ve Merkezi Park" width="100%" height="100%" viewBox="0 0 800 440" style="display: block;">
+<rect x="0" y="0" width="800" height="440" fill="#08101f"></rect>
+<g stroke="#121c33" stroke-width="20" stroke-linecap="round">
+<line x1="0" y1="220" x2="800" y2="220"></line>
+<line x1="400" y1="0" x2="400" y2="440"></line>
+<line x1="400" y1="220" x2="800" y2="20"></line>
+</g>
+<g stroke="#1b2847" stroke-width="1.5" stroke-dasharray="8 8">
+<line x1="0" y1="220" x2="800" y2="220"></line>
+<line x1="400" y1="0" x2="400" y2="440"></line>
+</g>
+<rect x="430" y="250" width="190" height="160" rx="18" fill="rgba(52,211,153,.07)" stroke="rgba(52,211,153,.25)"></rect>
+<text x="448" y="276" fill="#4d8f76" font-size="13" font-family="IBM Plex Sans, sans-serif">Merkezi Park</text>
+<rect x="60" y="50" width="270" height="140" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
+<text x="78" y="76" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Mühendislik Fakültesi</text>
+<rect x="450" y="40" width="170" height="140" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
+<text x="468" y="66" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Kütüphane</text>
+<rect x="650" y="110" width="120" height="80" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
+<text x="664" y="136" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Rektörlük</text>
+<rect x="60" y="250" width="270" height="160" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
+<text x="78" y="276" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Yurtlar</text>
+<rect x="650" y="260" width="120" height="150" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
+<text x="664" y="286" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Yemekhane</text>
+<circle cx="195" cy="125" r="70" fill="rgba(244,63,94,.10)"></circle>
+<line x1="195" y1="330" x2="400" y2="220" stroke="#3b4660" stroke-width="2" stroke-dasharray="3 6"></line>
+<line class="akis" x1="535" y1="120" x2="400" y2="220" stroke="#22d3ee" stroke-width="2.5" stroke-dasharray="10 18" stroke-linecap="round"></line>
+<line class="akis-hizli" x1="195" y1="125" x2="400" y2="220" stroke="#f43f5e" stroke-width="3" stroke-dasharray="10 18" stroke-linecap="round"></line>
+<circle class="hub-halka" cx="400" cy="220" r="26" fill="none" stroke="rgba(34,211,238,.35)" stroke-width="2"></circle>
+<circle cx="400" cy="220" r="19" fill="#0b1730" stroke="#22d3ee" stroke-width="2"></circle>
+<path d="M392 214h16v5h-16zM392 222h16v5h-16z" fill="none" stroke="#22d3ee" stroke-width="1.6"></path>
+<rect x="356" y="250" width="88" height="22" rx="6" fill="rgba(6,11,22,.9)" stroke="#24345a"></rect>
+<text x="400" y="265" text-anchor="middle" fill="#a9b6cf" font-size="12" font-family="JetBrains Mono, monospace">Mosquitto</text>
+</svg>
+<sc-for list="{{nodes}}" as="n" hint-placeholder-count="3">
+<button type="button" onClick="{{n.pick}}" aria-label="{{n.aria}}" aria-pressed="{{n.pressed}}" style="{{n.konumStil}}">
+<span class="{{n.cls}}" style="{{n.noktaStil}}"></span>
+<span style="{{n.etiketStil}}">{{n.id}}</span>
+</button>
+</sc-for>
+<div style="position: absolute; left: 14px; bottom: 14px; min-width: 250px; max-width: calc(100% - 28px); box-sizing: border-box; padding: 14px 16px; border-radius: 12px; background: rgba(6,11,22,.92); border: 1px solid #24345a; box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 10px;">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 600;">{{sel.id}}</span>
+<span style="font-size: 13px; color: #8b9bb8;">{{sel.konum}}</span>
+</div>
+<span style="{{sel.durumStil}}">{{sel.durum}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+<div style="padding: 8px; border-radius: 8px; background: #0c1526; display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 11px; color: #8b9bb8;">PIR</span><span style="font-size: 13px; font-weight: 600;">{{sel.pir}}</span></div>
+<div style="padding: 8px; border-radius: 8px; background: #0c1526; display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 11px; color: #8b9bb8;">MQ-2</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: #22d3ee;">{{sel.mq2}}</span></div>
+<div style="padding: 8px; border-radius: 8px; background: #0c1526; display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 11px; color: #8b9bb8;">Alev</span><span style="{{sel.alevStil}}">{{sel.alev}}</span></div>
+</div>
+<span style="font-size: 12px; color: #6b7a96;">Son veri: <span style="font-family: 'JetBrains Mono', monospace;">{{sel.sonVeri}}</span></span>
+</div>
+</div>
+</div>
+
+<div style="flex: 1 1 320px; display: flex; flex-direction: column; gap: 16px;">
+<div style="background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+<div style="align-self: stretch; display: flex; justify-content: space-between; align-items: center;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Duman seviyesi</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7a96;">MQ-2 · dugum1</span>
+</div>
+<div style="position: relative; width: 240px; height: 150px;">
+<svg role="img" aria-label="Duman göstergesi: 1480, eşik 1800, ölçek 0 ile 3000 arası" width="240" height="150" viewBox="0 0 220 130">
+<path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="#16213a" stroke-width="16" stroke-linecap="round"></path>
+<path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="rgba(244,63,94,.35)" stroke-width="16" pathLength="100" stroke-dasharray="40 100" stroke-dashoffset="-60"></path>
+<path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="#22d3ee" stroke-width="16" stroke-linecap="round" pathLength="100" stroke-dasharray="49.3 100"></path>
+<line x1="134.7" y1="33.9" x2="140.9" y2="14.9" stroke="#f43f5e" stroke-width="3" stroke-linecap="round"></line>
+</svg>
+<div style="position: absolute; left: 0; right: 0; bottom: 8px; display: flex; flex-direction: column; align-items: center; gap: 0;">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 600; color: #e6edf7; line-height: 1.1;">1480</span>
+<span style="font-size: 12px; color: #8b9bb8;">eşik 1800</span>
+</div>
+</div>
+<div style="align-self: stretch; display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7a96; padding: 0 16px;"><span>0</span><span>3000</span></div>
+<div style="align-self: stretch; margin-top: 6px; padding: 10px 12px; border-radius: 10px; background: rgba(251,146,60,.08); border: 1px solid rgba(251,146,60,.3); font-size: 13px; color: #fed7aa;">Son 60 sn'de tepe değer <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">2140</span> · eşik 2 kez aşıldı</div>
+</div>
+
+<div style="background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; margin-bottom: 8px;">Son olaylar</span>
+<sc-for list="{{akis}}" as="a" hint-placeholder-count="5">
+<div style="display: flex; gap: 12px;">
+<div style="display: flex; flex-direction: column; align-items: center; width: 12px;">
+<span style="{{a.nokta}}"></span>
+<span style="{{a.cizgi}}"></span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 14px; flex: 1;">
+<div style="display: flex; justify-content: space-between; gap: 8px;"><span style="font-size: 14px; font-weight: 600;">{{a.baslik}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7a96;">{{a.zaman}}</span></div>
+<span style="font-size: 13px; color: #8b9bb8;">{{a.detay}}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</section>
+
+<section style="display: flex; flex-wrap: wrap; gap: 16px;">
+<div style="flex: 999 1 560px; min-width: 0; background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Haftalık olay yoğunluğu</span>
+<span style="font-size: 13px; color: #8b9bb8;">Saat ve güne göre olay sayısı · sensor_gecmis</span>
+</div>
+<div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8b9bb8;">Az<span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(34,211,238,.1); display: inline-block;"></span><span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(34,211,238,.35); display: inline-block;"></span><span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(34,211,238,.6); display: inline-block;"></span><span style="width: 14px; height: 14px; border-radius: 3px; background: rgba(34,211,238,.9); display: inline-block;"></span>Çok</div>
+</div>
+<div style="overflow-x: auto;">
+<div style="min-width: 640px; display: flex; flex-direction: column; gap: 4px;">
+<sc-for list="{{isi}}" as="g" hint-placeholder-count="7">
+<div style="display: flex; align-items: center; gap: 8px;">
+<span style="width: 34px; font-size: 12px; color: #8b9bb8;">{{g.gun}}</span>
+<div style="flex: 1; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px;">
+<sc-for list="{{g.hucreler}}" as="h" hint-placeholder-count="24">
+<span title="{{h.ipucu}}" style="{{h.stil}}"></span>
+</sc-for>
+</div>
+</div>
+</sc-for>
+<div style="display: flex; gap: 8px;"><span style="width: 34px;"></span><div style="flex: 1; display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #6b7a96;"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div></div>
+</div>
+</div>
+</div>
+<div style="flex: 1 1 300px; background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Seviye dağılımı</span>
+<sc-for list="{{dagilim}}" as="d" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; gap: 6px;">
+<div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #c9d4e8;">{{d.ad}}</span><span style="font-family: 'JetBrains Mono', monospace; color: #a9b6cf;">{{d.sayi}}</span></div>
+<div style="height: 8px; border-radius: 999px; background: #121c33; overflow: hidden;"><div style="{{d.bar}}"></div></div>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="background: rgba(12,19,36,.88); border: 1px solid #1a2540; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+<div style="display: flex; align-items: baseline; gap: 10px;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Olay kayıtları</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6b7a96;">{{countLabel}}</span>
+</div>
+<div role="group" aria-label="Seviye filtresi" style="display: flex; flex-wrap: wrap; gap: 6px;">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="6">
+<button type="button" onClick="{{f.pick}}" aria-pressed="{{f.pressed}}" style="{{f.style}}">{{f.label}}</button>
+</sc-for>
+</div>
+</div>
+<div style="overflow-x: auto; border-radius: 12px; border: 1px solid #16213a;">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse; font-size: 14px;">
+<thead>
+<tr style="background: #0a1222; text-align: left;">
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: #8b9bb8;">Zaman</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: #8b9bb8;">Düğüm</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: #8b9bb8;">Sensör</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: #8b9bb8;">Değer</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: #8b9bb8;">Seviye</th>
+<th style="padding: 12px 16px; font-size: 12px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: #8b9bb8;">Açıklama</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+<tr class="satir">
+<td style="padding: 12px 16px; border-top: 1px solid #16213a; font-family: 'JetBrains Mono', monospace; color: #a9b6cf;">{{r.zaman}}</td>
+<td style="padding: 12px 16px; border-top: 1px solid #16213a; font-family: 'JetBrains Mono', monospace;">{{r.dugum}}</td>
+<td style="padding: 12px 16px; border-top: 1px solid #16213a;">{{r.sensor}}</td>
+<td style="padding: 12px 16px; border-top: 1px solid #16213a; font-family: 'JetBrains Mono', monospace;">{{r.deger}}</td>
+<td style="padding: 12px 16px; border-top: 1px solid #16213a;"><span style="{{r.rozet}}">{{r.seviyeAd}}</span></td>
+<td style="padding: 12px 16px; border-top: 1px solid #16213a; color: #c9d4e8;">{{r.mesaj}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<footer style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12px; color: #6b7a96;">
+<span>ESP32-S2 → MQTT (QoS 1, LWT) → Mosquitto → FastAPI → SQLite → React</span>
+<span style="font-family: 'JetBrains Mono', monospace;">kampus/guvenlik/#</span>
+</footer>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2200}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { filtre: 'hepsi', alarm: true, secili: 'dugum1', simdi: new Date() };
+  }
+  componentDidMount() {
+    var self = this;
+    this.zamanlayici = setInterval(function () { self.setState({ simdi: new Date() }); }, 1000);
+  }
+  componentWillUnmount() {
+    clearInterval(this.zamanlayici);
+  }
+  renderVals() {
+    var self = this;
+    var simdi = this.state.simdi;
+    var saat = simdi.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var tarih = simdi.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+    var alarmVar = this.state.alarm;
+    var tehdit = {
+      metin: alarmVar ? 'KRİTİK' : 'İZLENİYOR',
+      kutu: 'display:flex;flex-direction:column;gap:2px;padding:8px 16px;border-radius:12px;' + (alarmVar
+        ? 'background:rgba(60,8,20,.8);border:1px solid rgba(244,63,94,.6);box-shadow:0 0 22px rgba(244,63,94,.3);'
+        : 'background:rgba(60,35,8,.6);border:1px solid rgba(251,146,60,.45);'),
+      metinStil: "font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:700;letter-spacing:1px;line-height:1.1;color:" + (alarmVar ? '#fb7185' : '#fdba74') + ';'
+    };
+    var hatVeri = [
+      { ad: 'ESP32-S2', alt: 'Sensör düğümleri', d: 'M9 3v2M15 3v2M9 19v2M15 19v2M3 9h2M3 15h2M19 9h2M19 15h2M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z' },
+      { ad: 'MQTT', alt: 'QoS 1 · LWT', d: 'M5 12.55a11 11 0 0 1 14 0M8.5 16.1a6 6 0 0 1 7 0M12 20h.01M2 8.82a15 15 0 0 1 20 0' },
+      { ad: 'FastAPI', alt: 'Kural motoru', d: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01' },
+      { ad: 'SQLite', alt: 'Kalıcı kayıt', d: 'M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3' },
+      { ad: 'Panel', alt: 'WebSocket canlı', d: 'M3 4h18v12H3zM8 20h8M12 16v4' }
+    ];
+    var hat = hatVeri.map(function (s, i) { return Object.assign({}, s, { bag: i < hatVeri.length - 1 }); });
+    var renk = { bilgi: '#60a5fa', uyari: '#2dd4bf', orta: '#facc15', yuksek: '#fb923c', kritik: '#fb7185' };
+    var ad = { bilgi: 'Bilgi', uyari: 'Uyarı', orta: 'Orta', yuksek: 'Yüksek', kritik: 'Kritik' };
+
+    var kartTemel = 'background:rgba(12,19,36,.88);border:1px solid #1a2540;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:10px;';
+    var kpis = [
+      { etiket: 'Toplam olay', sayi: '128', alt: 'Bugün · tüm düğümler', trend: '+12 / sa', renk: '#22d3ee', spark: '2,28 14,26 26,27 38,22 50,23 62,18 74,14 86,12 94,8', kritik: false },
+      { etiket: 'Kritik', sayi: '3', alt: 'Alev algılama', trend: 'AKTİF', renk: '#fb7185', spark: '2,30 14,30 26,30 38,30 50,30 62,22 74,30 86,10 94,6', kritik: true },
+      { etiket: 'Yüksek', sayi: '14', alt: 'Duman eşiği (>1800)', trend: '+2', renk: '#fb923c', spark: '2,26 14,24 26,27 38,20 50,22 62,16 74,18 86,9 94,12', kritik: false },
+      { etiket: 'Aktif düğüm', sayi: '2/3', alt: 'dugum3 çevrimdışı', trend: 'LWT', renk: '#34d399', spark: '2,8 14,8 26,8 38,8 50,8 62,20 74,20 86,20 94,20', kritik: false }
+    ].map(function (k) {
+      return Object.assign({}, k, {
+        kart: kartTemel + (k.kritik ? 'border-color:rgba(244,63,94,.55);box-shadow:0 0 28px rgba(244,63,94,.18);' : ''),
+        sayiStil: "font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:600;line-height:1;color:" + (k.kritik ? '#fb7185' : '#e6edf7') + ';',
+        trendStil: 'font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 8px;border-radius:999px;color:' + k.renk + ';background:' + k.renk + '1f;'
+      });
+    });
+
+    var dugumler = [
+      { id: 'dugum1', konum: 'Mühendislik Fakültesi', x: 24.4, y: 28.4, durum: 'Alarm', tip: 'alarm', pir: 'Pasif', mq2: '1480', alev: 'VAR', sonVeri: '3 sn önce' },
+      { id: 'dugum2', konum: 'Kütüphane', x: 66.9, y: 27.3, durum: 'Çevrimiçi', tip: 'ok', pir: 'Aktif', mq2: '640', alev: 'Yok', sonVeri: '1 sn önce' },
+      { id: 'dugum3', konum: 'Yurtlar', x: 24.4, y: 75, durum: 'Çevrimdışı', tip: 'off', pir: '—', mq2: '—', alev: '—', sonVeri: '14 dk önce' }
+    ];
+    var tipRenk = { alarm: '#f43f5e', ok: '#34d399', off: '#64748b' };
+    var secili = this.state.secili;
+    var nodes = dugumler.map(function (n) {
+      var c = tipRenk[n.tip];
+      var aktif = n.id === secili;
+      return {
+        id: n.id,
+        aria: n.id + ', ' + n.konum + ', ' + n.durum,
+        pressed: aktif ? 'true' : 'false',
+        pick: function () { self.setState({ secili: n.id }); },
+        cls: n.tip === 'alarm' ? 'n-kirmizi' : (n.tip === 'ok' ? 'n-yesil' : 'n-gri'),
+        konumStil: 'position:absolute;left:' + n.x + '%;top:' + n.y + '%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:none;padding:6px;cursor:pointer;min-width:44px;min-height:44px;',
+        noktaStil: 'width:' + (aktif ? 20 : 16) + 'px;height:' + (aktif ? 20 : 16) + 'px;border-radius:50%;background:' + c + ';border:3px solid #050912;outline:' + (aktif ? '2px solid ' + c : 'none') + ';display:block;',
+        etiketStil: "font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;color:#e6edf7;background:rgba(6,11,22,.9);border:1px solid " + (aktif ? c : '#24345a') + ';'
+      };
+    });
+    var s = dugumler.filter(function (n) { return n.id === secili; })[0];
+    var sc = tipRenk[s.tip];
+    var sel = Object.assign({}, s, {
+      durumStil: 'font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;color:' + sc + ';background:' + sc + '22;border:1px solid ' + sc + '66;',
+      alevStil: 'font-size:13px;font-weight:700;color:' + (s.alev === 'VAR' ? '#fb7185' : '#e6edf7') + ';'
+    });
+
+    var akisVeri = [
+      { baslik: 'Alev algılandı', detay: 'dugum1 · Mühendislik', zaman: '00:18:42', s: 'kritik' },
+      { baslik: 'Duman eşiği aşıldı', detay: 'dugum1 · 2140', zaman: '00:18:37', s: 'yuksek' },
+      { baslik: 'Hareket algılandı', detay: 'dugum2 · Kütüphane', zaman: '00:17:55', s: 'orta' },
+      { baslik: 'Düğüm çevrimdışı', detay: 'dugum3 · LWT mesajı', zaman: '00:05:10', s: 'uyari' },
+      { baslik: 'Düğüm çevrimiçi', detay: 'dugum2 · Kütüphane', zaman: '00:01:02', s: 'bilgi' }
+    ];
+    var akis = akisVeri.map(function (a, i) {
+      var c = renk[a.s];
+      return Object.assign({}, a, {
+        nokta: 'width:12px;height:12px;border-radius:50%;background:' + c + ';box-shadow:0 0 10px ' + c + '99;flex-shrink:0;margin-top:4px;display:block;',
+        cizgi: 'width:2px;flex:1;background:' + (i === akisVeri.length - 1 ? 'transparent' : '#1a2540') + ';display:block;'
+      });
+    });
+
+    var gunler = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+    var isi = gunler.map(function (g, d) {
+      var hucreler = [];
+      for (var h = 0; h < 24; h++) {
+        var temel = (h >= 8 && h <= 18) ? (d < 5 ? 0.5 : 0.25) : 0.08;
+        var v = Math.min(1, temel + ((d * 31 + h * 17) % 10) / 22);
+        var adet = Math.round(v * 12);
+        hucreler.push({
+          ipucu: g + ' ' + (h < 10 ? '0' + h : h) + ':00 · ' + adet + ' olay',
+          stil: 'height:20px;border-radius:4px;display:block;background:rgba(34,211,238,' + (0.07 + v * 0.85).toFixed(2) + ');'
+        });
+      }
+      return { gun: g, hucreler: hucreler };
+    });
+
+    var dagVeri = [['kritik', 3], ['yuksek', 14], ['orta', 48], ['uyari', 22], ['bilgi', 41]];
+    var dagilim = dagVeri.map(function (p) {
+      return { ad: ad[p[0]], sayi: p[1], bar: 'height:100%;border-radius:999px;background:' + renk[p[0]] + ';width:' + Math.max(3, Math.round(p[1] / 48 * 100)) + '%;' };
+    });
+
+    var tum = [
+      { zaman: '00:18:42', dugum: 'dugum1', sensor: 'Alev', deger: '1', seviye: 'kritik', mesaj: 'Alev algılandı' },
+      { zaman: '00:18:37', dugum: 'dugum1', sensor: 'MQ-2', deger: '2140', seviye: 'yuksek', mesaj: 'Duman eşiği aşıldı (>1800)' },
+      { zaman: '00:18:30', dugum: 'dugum1', sensor: 'MQ-2', deger: '1950', seviye: 'yuksek', mesaj: 'Duman eşiği aşıldı (>1800)' },
+      { zaman: '00:17:55', dugum: 'dugum2', sensor: 'PIR', deger: '1', seviye: 'orta', mesaj: 'Hareket algılandı' },
+      { zaman: '00:17:12', dugum: 'dugum1', sensor: 'PIR', deger: '1', seviye: 'orta', mesaj: 'Hareket algılandı' },
+      { zaman: '00:05:10', dugum: 'dugum3', sensor: 'Sistem', deger: '—', seviye: 'uyari', mesaj: 'Düğüm çevrimdışı (LWT)' },
+      { zaman: '00:01:02', dugum: 'dugum2', sensor: 'Sistem', deger: '—', seviye: 'bilgi', mesaj: 'Düğüm çevrimiçi oldu' }
+    ];
+    var f = this.state.filtre;
+    var rows = tum.filter(function (r) { return f === 'hepsi' || r.seviye === f; }).map(function (r) {
+      var c = renk[r.seviye];
+      return Object.assign({}, r, {
+        seviyeAd: ad[r.seviye],
+        rozet: 'display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;color:' + c + ';background:' + c + '1f;border:1px solid ' + c + '55;'
+      });
+    });
+    var liste = [['hepsi', 'Tümü'], ['kritik', 'Kritik'], ['yuksek', 'Yüksek'], ['orta', 'Orta'], ['uyari', 'Uyarı'], ['bilgi', 'Bilgi']];
+    var filters = liste.map(function (p) {
+      var aktif = f === p[0];
+      return {
+        label: p[1],
+        pressed: aktif ? 'true' : 'false',
+        pick: function () { self.setState({ filtre: p[0] }); },
+        style: 'min-height:36px;padding:0 14px;border-radius:999px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;' +
+          (aktif ? 'background:#22d3ee;color:#04202a;border:1px solid #22d3ee;' : 'background:transparent;color:#a9b6cf;border:1px solid #24324f;')
+      };
+    });
+
+    return {
+      saat: saat, tarih: tarih, tehdit: tehdit, hat: hat,
+      kpis: kpis, nodes: nodes, sel: sel, akis: akis, isi: isi, dagilim: dagilim,
+      rows: rows, filters: filters, countLabel: rows.length + ' kayıt',
+      showAlarm: this.state.alarm,
+      dismiss: function () { self.setState({ alarm: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
