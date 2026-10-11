@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import "./App.css";
-import DumanGrafik from "./DumanGrafik";
 import SolMenu from "./components/SolMenu";
 import UstBar from "./components/UstBar";
 import AlarmBandi from "./components/AlarmBandi";
 import OzetKartlari from "./components/OzetKartlari";
 import VeriHatti from "./components/VeriHatti";
+import KampusHaritasi from "./components/KampusHaritasi";
+import DumanGostergesi from "./components/DumanGostergesi";
+import OlayAkisi from "./components/OlayAkisi";
 import useDugumler from "./hooks/useDugumler";
-import { API, WS_URL, ESIK_DUMAN_VARSAYILAN } from "./sabitler";
+import useDumanGecmis from "./hooks/useDumanGecmis";
+import { API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN } from "./sabitler";
 import {
-  seviyeAnahtari, olayKimligi, sonKritikOlay, tehditHesapla,
+  seviyeAnahtari, olayKimligi, sonKritikOlay, tehditHesapla, pencereIcinde,
 } from "./hesaplar";
 
 const ANALITIK_LIMIT = 1000;
@@ -24,6 +27,7 @@ function App() {
   const [dbDurum, setDbDurum] = useState("bekliyor"); // ok | hata | bekliyor
   const [filtre, setFiltre] = useState("hepsi");
   const [onaylananKimlik, setOnaylananKimlik] = useState(null);
+  const [seciliDugum, setSeciliDugum] = useState(null);
   const [simdi, setSimdi] = useState(() => new Date());
   const wsRef = useRef(null);
   const yenidenBaglanRef = useRef(null);
@@ -163,6 +167,21 @@ function App() {
     cevrimdisi: dugumListesi.filter((d) => !d.cevrimici).map((d) => d.id),
   };
 
+  // Son 5 dk'da kritik olayı olan düğümler haritada alarm gösterir
+  const alarmdakiler = new Set(
+    pencereIcinde(kaynak, simdiSn, TEHDIT_PENCERE_SN)
+      .filter((o) => seviyeAnahtari(o.seviye) === "kritik")
+      .map((o) => o.dugum)
+  );
+  // Seçim yoksa: önce alarmdaki düğüm, yoksa ilk düğüm
+  const gosterilenDugum =
+    (seciliDugum && dugumIdleri.includes(seciliDugum) && seciliDugum) ||
+    dugumIdleri.find((id) => alarmdakiler.has(id)) ||
+    dugumIdleri[0] ||
+    null;
+  const dumanVeri = useDumanGecmis(gosterilenDugum);
+  const dumanSon60 = dumanVeri.filter((o) => simdiSn - o.zaman <= 60);
+
   const tehdit = tehditHesapla(kaynak, simdiSn, onaylananKimlik);
   const kritikOlay = sonKritikOlay(kaynak, simdiSn);
   const alarmGoster = kritikOlay && olayKimligi(kritikOlay) !== onaylananKimlik;
@@ -222,10 +241,19 @@ function App() {
 
         <VeriHatti durumlar={hatDurumlari} />
 
-        {/* Geçici: B aşamasında harita + gösterge ile değişecek */}
-        <div id="harita">
-          <DumanGrafik />
-        </div>
+        <section id="harita" className="satir-2">
+          <KampusHaritasi
+            dugumler={dugumListesi}
+            alarmdakiler={alarmdakiler}
+            secili={gosterilenDugum}
+            onSec={setSeciliDugum}
+            simdiSn={simdiSn}
+          />
+          <div className="sag-sutun">
+            <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
+            <OlayAkisi olaylar={olaylar} />
+          </div>
+        </section>
 
         {/* Geçici: C aşamasında OlayTablosu bileşenine taşınacak */}
         <section id="olaylar" className="kart bolum olay-bolum">
