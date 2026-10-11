@@ -33,20 +33,37 @@ function DumanGrafik() {
     return () => clearInterval(z);
   }, []);
 
+  const eksenYazi = { fill: "#8b97ad", fontSize: 11, fontFamily: "JetBrains Mono, monospace" };
+
   return (
-    <div className="grafik-bolum">
-      <h2>Duman/Gaz Seviyesi (canlı)</h2>
+    <section className="kart grafik-bolum">
+      <h2 className="kart-baslik">Duman/Gaz Seviyesi (canlı)</h2>
       <div className="grafik-kutu">
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={280}>
           <LineChart data={veri} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="saat" stroke="#64748b" fontSize={11} minTickGap={30} />
-            <YAxis stroke="#64748b" fontSize={11} domain={[0, 4095]} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#1f2a44" vertical={false} />
+            <XAxis
+              dataKey="saat"
+              stroke="#1f2a44"
+              tick={eksenYazi}
+              tickLine={false}
+              minTickGap={30}
+            />
+            <YAxis
+              stroke="#1f2a44"
+              tick={eksenYazi}
+              tickLine={false}
+              domain={[0, 4095]}
+            />
             <Tooltip
               contentStyle={{
-                background: "#1e293b", border: "1px solid #334155",
+                background: "#0b1120", border: "1px solid #1f2a44",
                 borderRadius: 8, color: "#e2e8f0",
+                fontFamily: "JetBrains Mono, monospace", fontSize: 12,
               }}
+              labelStyle={{ color: "#8b97ad" }}
+              itemStyle={{ color: "#22d3ee" }}
+              cursor={{ stroke: "#22d3ee", strokeOpacity: 0.3 }}
             />
             <ReferenceLine
               y={ESIK}
@@ -57,15 +74,16 @@ function DumanGrafik() {
             <Line
               type="monotone"
               dataKey="deger"
-              stroke="#38bdf8"
+              stroke="#22d3ee"
               strokeWidth={2}
               dot={false}
+              activeDot={{ r: 4, fill: "#22d3ee", stroke: "#0b1120" }}
               isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </section>
   );
 }
 
