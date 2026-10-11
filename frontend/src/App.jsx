@@ -12,7 +12,6 @@ import IsiHaritasi from "./components/IsiHaritasi";
 import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
 import useDugumler from "./hooks/useDugumler";
-import useDumanGecmis from "./hooks/useDumanGecmis";
 import {
   API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, DUGUM_KONUMLARI,
 } from "./sabitler";
@@ -96,6 +95,7 @@ function App() {
           if (mesaj.tip === "olay" && mesaj.veri) {
             setOlaylar((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, 50));
             setAnalitik((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, ANALITIK_LIMIT));
+            okumaEkle(mesaj.veri); // gösterge, grafik ve harita aynı anda güncellenir
           }
         } catch (e) {
           console.error("WS mesaj çözme hatası:", e);
@@ -159,7 +159,7 @@ function App() {
     if (durum?.son_gorulme != null) idler.add("dugum1"); // /api/durum dugum1'e bakar
     return [...idler].sort();
   }, [kaynak, durum?.son_gorulme]);
-  const { dugumler, cevrimiciGecmis } = useDugumler(dugumIdleri);
+  const { dugumler, cevrimiciGecmis, okumaEkle } = useDugumler(dugumIdleri, simdiSn);
   const dugumListesi = dugumIdleri.map((id) => dugumler[id] ?? { id, cevrimici: false });
   const dugumOzet = {
     toplam: dugumListesi.length,
@@ -181,8 +181,9 @@ function App() {
     haritadakiler.find((id) => alarmdakiler.has(id)) ||
     haritadakiler[0] ||
     null;
-  const dumanVeri = useDumanGecmis(gosterilenDugum);
-  const dumanSon60 = dumanVeri.filter((o) => simdiSn - o.zaman <= 60);
+  // Gösterge ve küçük grafik, harita detay kartıyla aynı okuma listesinden
+  const dumanSeri = gosterilenDugum ? dugumler[gosterilenDugum]?.dumanSeri ?? [] : [];
+  const dumanSon60 = dumanSeri.filter((o) => simdiSn - o.zaman <= 60);
 
   const tehdit = tehditHesapla(kaynak, simdiSn, onaylananKimlik);
   const kritikOlay = sonKritikOlay(kaynak, simdiSn);

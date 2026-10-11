@@ -167,10 +167,10 @@ a:focus-visible {
   cursor: not-allowed;
 }
 
-/* İçerik: geniş ekranda 1680px'te durur ve ortalanır */
+/* İçerik: 1920px'e kadar tam genişlik; yalnızca çok geniş ekranlarda (>2400) durur */
 .icerik {
   width: 100%;
-  max-width: 1680px;
+  max-width: 2400px;
   min-width: 0;
   margin: 0 auto;
   padding: clamp(14px, 2vw, 32px);
@@ -1196,7 +1196,7 @@ a:focus-visible {
 
 /* ================================================================
    Duyarlı düzen
-   ≥1920        içerik ortalı, max 1680px (yukarıdaki .icerik kuralı)
+   ≥1920        içerik tam genişlik, en fazla 2400px (yukarıdaki .icerik kuralı)
    1280–1919    tam genişlik, 2 sütunlu satırlar
    900–1279     özet 2×2, iki sütunlu satırlar alt alta
    600–899      menü üstte yatay şerit, her satır tek sütun
