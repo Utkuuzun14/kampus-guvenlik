@@ -8,6 +8,9 @@ import VeriHatti from "./components/VeriHatti";
 import KampusHaritasi from "./components/KampusHaritasi";
 import DumanGostergesi from "./components/DumanGostergesi";
 import OlayAkisi from "./components/OlayAkisi";
+import IsiHaritasi from "./components/IsiHaritasi";
+import SeviyeDagilimi from "./components/SeviyeDagilimi";
+import OlayTablosu from "./components/OlayTablosu";
 import useDugumler from "./hooks/useDugumler";
 import useDumanGecmis from "./hooks/useDumanGecmis";
 import { API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN } from "./sabitler";
@@ -143,11 +146,6 @@ function App() {
     return () => clearInterval(saatZaman);
   }, []);
 
-  const zamanBicim = (unix) => {
-    if (!unix) return "-";
-    return new Date(unix * 1000).toLocaleString("tr-TR");
-  };
-
   // ---- Türetilmiş görünüm verileri ----
   const simdiSn = Math.floor(simdi.getTime() / 1000);
   const kaynak = analitik.length >= olaylar.length ? analitik : olaylar;
@@ -206,11 +204,6 @@ function App() {
     panel: baglanti === "canli" ? "ok" : baglanti === "kopuk" ? "hata" : "uyari",
   };
 
-  const rozetSinifi = (seviye) => {
-    const anahtar = seviyeAnahtari(seviye);
-    return anahtar ? `rozet rozet-${anahtar}` : "rozet rozet-bilinmeyen";
-  };
-
   return (
     <div className="kabuk">
       <SolMenu />
@@ -255,56 +248,12 @@ function App() {
           </div>
         </section>
 
-        {/* Geçici: C aşamasında OlayTablosu bileşenine taşınacak */}
-        <section id="olaylar" className="kart bolum olay-bolum">
-          <div className="olay-ustbar">
-            <span className="bolum-baslik">Son Olaylar</span>
-            <div className="filtreler">
-              {["hepsi", "kritik", "yuksek", "orta", "uyari", "bilgi"].map((f) => (
-                <button
-                  key={f}
-                  className={filtre === f ? "filtre-btn aktif" : "filtre-btn"}
-                  onClick={() => setFiltre(f)}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="tablo-sarmal">
-            <table className="olay-tablo">
-              <thead>
-                <tr>
-                  <th>Zaman</th>
-                  <th>Düğüm</th>
-                  <th>Sensör</th>
-                  <th>Değer</th>
-                  <th>Seviye</th>
-                  <th>Mesaj</th>
-                </tr>
-              </thead>
-              <tbody>
-                {olaylar.length === 0 && (
-                  <tr>
-                    <td colSpan="6" className="bos">Henüz olay yok.</td>
-                  </tr>
-                )}
-                {olaylar.filter((o) => filtre === "hepsi" || o.seviye === filtre).map((o, i) => (
-                  <tr key={o.id ?? i}>
-                    <td className="mono">{zamanBicim(o.zaman)}</td>
-                    <td className="mono">{o.dugum}</td>
-                    <td>{o.sensor}</td>
-                    <td className="mono">{o.deger}</td>
-                    <td>
-                      <span className={rozetSinifi(o.seviye)}>{o.seviye}</span>
-                    </td>
-                    <td>{o.mesaj}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <section id="analitik" className="satir-2">
+          <IsiHaritasi olaylar={analitik} simdiSn={simdiSn} limit={ANALITIK_LIMIT} />
+          <SeviyeDagilimi olaylar={analitik} simdiSn={simdiSn} />
         </section>
+
+        <OlayTablosu olaylar={olaylar} filtre={filtre} onFiltre={setFiltre} simdi={simdi} />
 
         <footer className="altbilgi">
           <span>ESP32-S2 → MQTT (QoS 1, LWT) → Mosquitto → FastAPI → SQLite → React</span>

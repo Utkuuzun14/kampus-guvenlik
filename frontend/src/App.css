@@ -640,14 +640,109 @@ a:focus-visible {
   animation: kay 1.8s linear infinite;
 }
 
-/* ---------- Olay tablosu (geçici; C aşamasında yenilenecek) ---------- */
+/* ---------- Isı haritası ---------- */
 
-.olay-ustbar {
+.isi-lejant {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--metin-soluk);
+}
+
+.isi-lejant span {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.isi-izgara {
+  min-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.isi-satir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.isi-gun {
+  width: 34px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--metin-soluk);
+}
+
+.isi-hucreler {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.isi-hucreler span {
+  height: 20px;
+  border-radius: 4px;
+  display: block;
+}
+
+.isi-saatler {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--metin-sonuk);
+}
+
+/* ---------- Seviye dağılımı ---------- */
+
+.dagilim-satir {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dagilim-ust {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #c9d4e8;
+}
+
+.dagilim-ust .mono { color: var(--metin-ikincil); }
+
+.dagilim-ray {
+  height: 8px;
+  border-radius: 999px;
+  background: #121c33;
+  overflow: hidden;
+}
+
+.dagilim-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* ---------- Olay tablosu ---------- */
+
+.tablo-ust {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.tablo-baslik {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .filtreler {
@@ -664,7 +759,6 @@ a:focus-visible {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  text-transform: capitalize;
   background: transparent;
   color: var(--metin-ikincil);
   border: 1px solid #24324f;
@@ -706,6 +800,9 @@ a:focus-visible {
 }
 
 .olay-tablo tbody tr:hover td { background: var(--kart-hover); }
+
+.olay-tablo td.soluk { color: var(--metin-ikincil); }
+.olay-tablo td.aciklama { color: #c9d4e8; }
 
 .bos {
   text-align: center;

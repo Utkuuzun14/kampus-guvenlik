@@ -88,3 +88,32 @@ export function sparkNoktalari(degerler, { max, genislik = 96, ust = 6, alt = 30
     .map((v, i) => `${(2 + i * adim).toFixed(1)},${(alt - (v / tepe) * (alt - ust)).toFixed(1)}`)
     .join(" ");
 }
+
+export const GUNLER = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+const HAFTA_SN = 7 * 86400;
+
+// Son 7 günün olaylarını haftanın günü × saat (7×24) matrisine sayar
+export function isiMatrisi(olaylar, simdiSn) {
+  const matris = GUNLER.map(() => Array(24).fill(0));
+  let toplam = 0;
+  for (const o of olaylar) {
+    if (!o.zaman || simdiSn - o.zaman > HAFTA_SN || o.zaman > simdiSn + 60) continue;
+    const t = new Date(o.zaman * 1000);
+    const gun = (t.getDay() + 6) % 7; // Pazartesi = 0
+    matris[gun][t.getHours()]++;
+    toplam++;
+  }
+  const enCok = Math.max(0, ...matris.flat());
+  return { matris, toplam, enCok };
+}
+
+// Son 7 gündeki olayların seviyelere göre sayısı
+export function seviyeSayilari(olaylar, simdiSn) {
+  const sayilar = Object.fromEntries(SEVIYELER.map((s) => [s, 0]));
+  for (const o of olaylar) {
+    if (!o.zaman || simdiSn - o.zaman > HAFTA_SN) continue;
+    const s = seviyeAnahtari(o.seviye);
+    if (s) sayilar[s]++;
+  }
+  return sayilar;
+}
