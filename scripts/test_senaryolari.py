@@ -8,20 +8,55 @@ KAPATILMALI (test sonuçlarını kirletmemesi için).
 
 Çalıştırma (backend venv aktifken, proje kökünden):
     python scripts/test_senaryolari.py
+
+Çalışma bitince (testler başarısız olsa bile) bu çalıştırmada oluşan
+test_dugum kayıtları olaylar ve sensor_gecmis tablolarından silinir.
 """
 import json
 import time
 import sys
 import os
+import sqlite3
 import urllib.request
 
 import paho.mqtt.client as mqtt
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
+sys.path.insert(0, BACKEND_DIZINI)
 from app import config  # noqa: E402
 
 API = "http://127.0.0.1:8000"
 DUGUM = "test_dugum"
+TABLOLAR = ("olaylar", "sensor_gecmis")
+
+
+def db_yolu():
+    """Backend backend/ dizininden çalıştığı için göreli yol oraya göre çözülür."""
+    yol = config.VERITABANI_YOLU
+    return yol if os.path.isabs(yol) else os.path.join(BACKEND_DIZINI, yol)
+
+
+def son_kayit_idleri():
+    """Her tablodaki en büyük id (testten önceki durum)."""
+    with sqlite3.connect(db_yolu()) as conn:
+        return {t: conn.execute(f"SELECT COALESCE(MAX(id), 0) FROM {t}").fetchone()[0]
+                for t in TABLOLAR}
+
+
+def test_verisini_temizle(baslangic):
+    """Bu çalıştırmada oluşan test_dugum kayıtlarını siler."""
+    conn = sqlite3.connect(db_yolu())
+    try:
+        silinen = {}
+        for t in TABLOLAR:
+            imlec = conn.execute(f"DELETE FROM {t} WHERE dugum = ? AND id > ?",
+                                 (DUGUM, baslangic[t]))
+            silinen[t] = imlec.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    print(f"\nTemizlik: {DUGUM} kayıtları silindi "
+          f"(olaylar: {silinen['olaylar']}, sensor_gecmis: {silinen['sensor_gecmis']})")
 
 
 def mqtt_baglan():
@@ -102,7 +137,17 @@ def main():
     print("=" * 60)
     print("Not: Broker + backend çalışmalı, sahte üreteç kapalı olmalı.")
 
+    baslangic = son_kayit_idleri()
     client = mqtt_baglan()
+    try:
+        testleri_calistir(client)
+    finally:
+        client.loop_stop()
+        client.disconnect()
+        test_verisini_temizle(baslangic)
+
+
+def testleri_calistir(client):
     time.sleep(1)
 
     sonuclar = []
@@ -155,9 +200,6 @@ def main():
         else:
             durum = "BEKLEMEDE"
         print(f"  {no:4} | {ad:30} | {durum}")
-
-    client.loop_stop()
-    client.disconnect()
 
 
 if __name__ == "__main__":
