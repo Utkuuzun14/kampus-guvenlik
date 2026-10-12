@@ -41,6 +41,11 @@ kampus-guvenlik/
 Ön koşul: `backend/.env` dolu (e-posta için `SMTP_KULLANICI` / `SMTP_PAROLA`).
 Komutlar proje kökünden, backend venv aktifken çalıştırılır.
 
+0. **Veritabanını sıfırla:** `python scripts/db_sifirla.py`
+   → önce `backend/yedekler/kampus_YYYYMMDD_HHMM.db` yedeği alınır, kayıt sayıları
+   gösterilir ve "EVET" onayı istenir (sorusuz: `--evet`). olaylar ve sensor_gecmis
+   boşaltılır, tablo yapısı korunur. Backend açıkken de çalışır; ardından backend'i
+   yeniden başlatmak bellekteki alarm durumunu da sıfırlar.
 1. **Sistemi başlat:** `scripts\baslat.bat` → Broker, Backend, Sahte Veri (üç düğüm)
    ve React paneli ayrı pencerelerde açılır. Panel: http://localhost:5173
 2. **Sakin durum (~1 dk):** panelde "Aktif düğüm 3/3", haritada üç düğüm yeşil çizgiyle
