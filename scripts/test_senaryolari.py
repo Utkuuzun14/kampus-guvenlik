@@ -1,8 +1,10 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T6).
+Test senaryoları scripti (rapor Tablo 6, T1-T7).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
 işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
 göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
+T7, test_dugum için LWT'li bir client açıp socket'ini temiz olmayan şekilde
+kapatır ve /api/dugumler'de çevrimdışı düşüp geri geldiğini doğrular.
 
 Çalıştırmadan önce: broker + backend çalışıyor olmalı, sahte veri üreteci
 KAPATILMALI (test sonuçlarını kirletmemesi için).
@@ -26,6 +28,7 @@ import paho.mqtt.client as mqtt
 BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
 sys.path.insert(0, BACKEND_DIZINI)
 from app import config  # noqa: E402
+import sahte_veri  # noqa: E402  (aynı dizin: LWT'li client ve kopma fonksiyonu)
 
 API = "http://127.0.0.1:8000"
 DUGUM = "test_dugum"
@@ -207,6 +210,67 @@ def test_bildirim():
     return basarili
 
 
+def dugum_durumu():
+    """/api/dugumler'deki test düğümü (yoksa None)."""
+    with urllib.request.urlopen(f"{API}/api/dugumler", timeout=5) as r:
+        liste = json.loads(r.read().decode("utf-8"))
+    return next((d for d in liste if d["id"] == DUGUM), None)
+
+
+def durum_bekle(kosul, sure=5.0):
+    """Koşul sağlanana kadar /api/dugumler'i yoklar. (sağlandı mı, geçen sn, son durum)"""
+    bas = time.monotonic()
+    while True:
+        d = dugum_durumu()
+        if d and kosul(d):
+            return True, time.monotonic() - bas, d
+        if time.monotonic() - bas > sure:
+            return False, time.monotonic() - bas, d
+        time.sleep(0.2)
+
+
+def test_lwt():
+    """
+    T7: LWT ile çevrimdışı düşme ve geri gelme (sahte üretecin dugum3 davranışı).
+    Üreteçle aynı fonksiyonlar kullanılır; rastgele kopmayı beklemek yerine
+    kopma hemen tetiklenir.
+    """
+    print(f"\n[T7] LWT: çevrimdışı düşme ve geri gelme ({DUGUM})")
+    kontroller = []
+
+    def kontrol(ad, sonuc):
+        tamam, sure, d = sonuc
+        ozet = f"cevrimici={d['cevrimici']}, son_durum={d['son_durum']}" if d else "düğüm yok"
+        print(f"    {'✓' if tamam else '✗'} {ad} ({sure:.1f} sn; {ozet})")
+        kontroller.append(tamam)
+
+    client = sahte_veri.istemci_olustur(DUGUM, client_id="test-lwt")
+    try:
+        sahte_veri.durum_yayinla(client, DUGUM, online=True).wait_for_publish(2)
+        kontrol("bağlandı, çevrimiçi göründü", durum_bekle(lambda d: d["cevrimici"]))
+
+        sahte_veri.baglantiyi_kopar(client)
+        print("    socket DISCONNECT gönderilmeden kapatıldı")
+        kontrol("broker LWT yayınladı, çevrimdışı düştü",
+                durum_bekle(lambda d: not d["cevrimici"] and d["son_durum"] == "offline"))
+
+        client = sahte_veri.istemci_olustur(DUGUM, client_id="test-lwt")
+        sahte_veri.durum_yayinla(client, DUGUM, online=True).wait_for_publish(2)
+        kontrol("geri bağlandı, tekrar çevrimiçi",
+                durum_bekle(lambda d: d["cevrimici"] and d["son_durum"] == "online"))
+    except Exception as e:
+        print(f"    ✗ hata: {e}")
+        kontroller.append(False)
+    finally:
+        # Temiz kapanış: DISCONNECT gönderilir, LWT tetiklenmez
+        client.disconnect()
+        client.loop_stop()
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
 def main():
     print("=" * 60)
     print("KAMPÜS GÜVENLİK SİSTEMİ - TEST SENARYOLARI (Tablo 6)")
@@ -248,17 +312,18 @@ def testleri_calistir(client):
     try:
         with urllib.request.urlopen(f"{API}/api/saglik", timeout=5) as r:
             saglik = json.loads(r.read().decode("utf-8"))
-        if saglik.get("durum") == "calisiyor":
-            print("    API /api/saglik yanıt veriyor, panel veriyi buradan çekiyor.")
+        if saglik.get("durum") == "calisiyor" and saglik.get("mqtt") == "bagli":
+            print("    API /api/saglik yanıt veriyor, backend broker'a bağlı (mqtt=bagli).")
             print("    ✓ BAŞARILI")
             sonuclar.append(("T5", "Web arayüzü / API", True))
         else:
-            raise Exception("beklenmeyen yanıt")
+            raise Exception(f"beklenmeyen yanıt: {saglik}")
     except Exception as e:
         print(f"    ✗ BAŞARISIZ ({e})")
         sonuclar.append(("T5", "Web arayüzü / API", False))
 
     sonuclar.append(("T6", "Bildirim (e-posta)", test_bildirim()))
+    sonuclar.append(("T7", "LWT: çevrimdışı ve geri gelme", test_lwt()))
 
     # Özet
     print("\n" + "=" * 60)
