@@ -70,6 +70,10 @@ kullanılır ki backend tek tip işlesin ve ileride alan eklenebilsin.
 { "dugum": "dugum1", "durum": "online", "zaman": 1730000000 }
 ```
 - `durum`: "online" (kart bağlanınca) / "offline" (LWT ile broker basar)
+- LWT: her düğüm kendi client'ı ile bağlanırken `.../<dugum_id>/durum` konusuna
+  `{"dugum": "<dugum_id>", "durum": "offline", "zaman": 0}` yükünü bırakır (QoS 1).
+  Yük bağlanırken sabitlendiği için `zaman` 0'dır; backend geliş anını yazar.
+  Temiz kapanışta düğüm "offline"ı kendisi yayınlar, ardından DISCONNECT gönderir.
 
 Ortak alanlar:
 - `dugum` (string): hangi düğüm
