@@ -46,11 +46,12 @@ export const SENSOR_KISA = {
   durum: "Sistem",
 };
 
-// Düğüm → kampüs konumu. x/y: harita üzerindeki yüzde konum (800×440 kroki).
+// Düğüm → harita üzerindeki yüzde konum (800×440 kroki). Konum adı (ör.
+// "Kütüphane") backend'den gelir: /api/dugumler → config.DUGUM_KONUMLARI.
 // Burada olmayan düğümler haritaya çizilmez, yalnızca "Aktif düğüm" sayısına girer.
 export const DUGUM_KONUMLARI = {
-  dugum1: { konum: "Mühendislik Fakültesi", x: 24.4, y: 28.4 },
-  dugum2: { konum: "Kütüphane", x: 66.9, y: 27.3 },
-  dugum3: { konum: "Yurtlar", x: 24.4, y: 75 },
+  dugum1: { x: 24.4, y: 28.4 },
+  dugum2: { x: 66.9, y: 27.3 },
+  dugum3: { x: 24.4, y: 75 },
 };
 

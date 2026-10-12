@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import SolMenu from "./components/SolMenu";
 import UstBar from "./components/UstBar";
@@ -11,7 +11,7 @@ import OlayAkisi from "./components/OlayAkisi";
 import IsiHaritasi from "./components/IsiHaritasi";
 import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
-import useDugumler from "./hooks/useDugumler";
+import useDugumler, { useDumanSerisi } from "./hooks/useDugumler";
 import {
   API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, DUGUM_KONUMLARI,
 } from "./sabitler";
@@ -28,6 +28,7 @@ function App() {
   const [baglanti, setBaglanti] = useState("baglaniyor"); // canli | kopuk | baglaniyor
   const [durum, setDurum] = useState(null);
   const [apiDurum, setApiDurum] = useState("bekliyor"); // ok | hata | bekliyor
+  const [mqttDurum, setMqttDurum] = useState("bekliyor"); // backend ↔ broker: ok | hata | bekliyor
   const [dbDurum, setDbDurum] = useState("bekliyor"); // ok | hata | bekliyor
   const [filtre, setFiltre] = useState("hepsi");
   const [onaylananKimlik, setOnaylananKimlik] = useState(null);
@@ -76,8 +77,11 @@ function App() {
     try {
       const cevap = await fetch(`${API}/api/saglik`);
       setApiDurum(cevap.ok ? "ok" : "hata");
+      const saglik = cevap.ok ? await cevap.json() : null;
+      setMqttDurum(saglik?.mqtt === "bagli" ? "ok" : saglik?.mqtt === "kopuk" ? "hata" : "bekliyor");
     } catch {
       setApiDurum("hata");
+      setMqttDurum("bekliyor"); // backend yoksa broker durumu bilinmiyor
     }
   };
 
@@ -153,19 +157,15 @@ function App() {
   const kaynak = analitik.length >= olaylar.length ? analitik : olaylar;
   const esik = durum?.esik_duman ?? ESIK_DUMAN_VARSAYILAN;
 
-  // Yalnızca backend'den görülen düğümler
-  const dugumIdleri = useMemo(() => {
-    const idler = new Set(kaynak.map((o) => o.dugum).filter(Boolean));
-    if (durum?.son_gorulme != null) idler.add("dugum1"); // /api/durum dugum1'e bakar
-    return [...idler].sort();
-  }, [kaynak, durum?.son_gorulme]);
-  const { dugumler, cevrimiciGecmis, okumaEkle } = useDugumler(dugumIdleri, simdiSn);
-  const dugumListesi = dugumIdleri.map((id) => dugumler[id] ?? { id, cevrimici: false });
+  // Düğüm listesi /api/dugumler'den (alarm üretmemiş ve hiç veri göndermemiş düğümler dahil)
+  const { dugumler: dugumListesi, cevrimiciGecmis, okumaEkle } = useDugumler(simdiSn);
   const dugumOzet = {
     toplam: dugumListesi.length,
     cevrimici: dugumListesi.filter((d) => d.cevrimici).length,
-    cevrimdisi: dugumListesi.filter((d) => !d.cevrimici).map((d) => d.id),
+    cevrimdisi: dugumListesi.filter((d) => !d.cevrimici && !d.veriYok).map((d) => d.id),
+    veriYok: dugumListesi.filter((d) => d.veriYok).map((d) => d.id),
   };
+  const konumlar = Object.fromEntries(dugumListesi.map((d) => [d.id, d.konum]));
 
   // Son 5 dk'da kritik olayı olan düğümler haritada alarm gösterir
   const alarmdakiler = new Set(
@@ -175,27 +175,28 @@ function App() {
   );
   // Gösterge ve harita detayı yalnızca haritadaki (konumu tanımlı) düğümler için.
   // Seçim yoksa: önce alarmdaki düğüm, yoksa ilk düğüm
-  const haritadakiler = dugumIdleri.filter((id) => DUGUM_KONUMLARI[id]);
+  const haritadakiler = dugumListesi.map((d) => d.id).filter((id) => DUGUM_KONUMLARI[id]);
   const gosterilenDugum =
     (seciliDugum && haritadakiler.includes(seciliDugum) && seciliDugum) ||
     haritadakiler.find((id) => alarmdakiler.has(id)) ||
     haritadakiler[0] ||
     null;
-  // Gösterge ve küçük grafik, harita detay kartıyla aynı okuma listesinden
-  const dumanSeri = gosterilenDugum ? dugumler[gosterilenDugum]?.dumanSeri ?? [] : [];
+  // Gösterge ve küçük grafik haritada seçili düğümü gösterir
+  const dumanSeri = useDumanSerisi(gosterilenDugum);
   const dumanSon60 = dumanSeri.filter((o) => simdiSn - o.zaman <= 60);
 
   const tehdit = tehditHesapla(kaynak, simdiSn, onaylananKimlik);
   const kritikOlay = sonKritikOlay(kaynak, simdiSn);
   const alarmGoster = kritikOlay && olayKimligi(kritikOlay) !== onaylananKimlik;
 
-  const brokerDurum = durum == null ? "bekliyor" : durum.cevrimici ? "ok" : "uyari";
+  // Broker ışığı: backend'in MQTT bağlantısı (/api/saglik); tek düğümün kopması etkilemez
+  const brokerDurum = mqttDurum;
   const isiklar = [
     {
       ad: "Broker",
       durum: brokerDurum,
-      not: brokerDurum === "uyari" ? "veri yok" : null,
-      ipucu: "Son 30 sn içinde düğümden veri geldi mi (dolaylı gösterge)",
+      not: brokerDurum === "hata" ? "bağlantı yok" : null,
+      ipucu: "Backend'in Mosquitto bağlantısı (/api/saglik → mqtt)",
     },
     { ad: "API", durum: apiDurum, ipucu: "/api/saglik" },
     { ad: "Veritabanı", durum: dbDurum, ipucu: "/api/olaylar" },
@@ -219,6 +220,7 @@ function App() {
         {alarmGoster && (
           <AlarmBandi
             olay={kritikOlay}
+            konumlar={konumlar}
             onOnayla={() => setOnaylananKimlik(olayKimligi(kritikOlay))}
           />
         )}
@@ -249,7 +251,7 @@ function App() {
           />
           <div className="sag-sutun">
             <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
-            <OlayAkisi olaylar={olaylar} />
+            <OlayAkisi olaylar={olaylar} konumlar={konumlar} />
           </div>
         </section>
 

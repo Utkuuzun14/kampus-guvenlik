@@ -1,118 +1,105 @@
 import { useState, useEffect, useCallback } from "react";
 import { API, CEVRIMDISI_SANIYE } from "../sabitler";
 
-// Tek kaynak: her düğümün sensör okumaları. Gösterge, küçük grafik, harita
-// detay kartı ve düğüm durumu hep buradan okur; böylece aynı anda güncellenir.
+// Tek kaynak: /api/dugumler. Düğüm listesi, konum adı, çevrimiçi durumu ve son
+// değerler buradan gelir; harita, detay kartı ve "Aktif düğüm" kartı aynı
+// listeyi okur. Duman serisi (gösterge + küçük grafik) yalnızca seçili düğüm
+// için ayrıca çekilir (useDumanSerisi).
+const YENILEME_MS = 3000;
 const DUMAN_SERI = 40; // ~2 dk (3 sn aralık)
-const LIMIT = { duman: DUMAN_SERI, hareket: 1, alev: 1 };
-const SENSORLER = Object.keys(LIMIT);
 
-async function okumalariGetir(sensor, dugum) {
+async function jsonGetir(yol) {
   try {
-    const cevap = await fetch(
-      `${API}/api/gecmis?sensor=${sensor}&dugum=${encodeURIComponent(dugum)}&limit=${LIMIT[sensor]}`
-    );
-    if (!cevap.ok) return null;
-    return await cevap.json(); // eski → yeni
+    const cevap = await fetch(`${API}${yol}`);
+    return cevap.ok ? await cevap.json() : null;
   } catch {
     return null;
   }
 }
 
-// İki okuma listesini zamana göre birleştirir (aynı zaman damgası tek kayıt)
-function birlestir(eski = [], yeni = [], sinir) {
-  const harita = new Map();
-  for (const o of [...eski, ...yeni]) harita.set(o.zaman, o);
-  return [...harita.values()].sort((a, b) => a.zaman - b.zaman).slice(-sinir);
-}
+// /api/dugumler satırı → panel düğüm nesnesi
+const donustur = (d) => ({
+  id: d.id,
+  konum: d.konum,
+  cevrimici: d.cevrimici,
+  veriYok: d.veri_yok,
+  sonZaman: d.son_veri_zamani,
+  duman: d.son?.duman ?? null,
+  hareket: d.son?.hareket ?? null,
+  alev: d.son?.alev ?? null,
+});
 
-export default function useDugumler(dugumIdleri, simdiSn) {
-  // okumalar: { [dugum]: { duman: [...], hareket: [...], alev: [...] } }
-  const [okumalar, setOkumalar] = useState({});
+export default function useDugumler(simdiSn) {
+  const [liste, setListe] = useState([]);
   const [cevrimiciGecmis, setCevrimiciGecmis] = useState([]);
-  const anahtar = dugumIdleri.join(",");
-
-  // WebSocket'ten gelen olay da bir sensör okumasıdır: anında ekle
-  const okumaEkle = useCallback((olay) => {
-    if (!olay?.dugum || !LIMIT[olay.sensor] || olay.zaman == null) return;
-    setOkumalar((onceki) => {
-      const dugum = onceki[olay.dugum] ?? {};
-      const yeni = { zaman: olay.zaman, deger: olay.deger, dugum: olay.dugum, sensor: olay.sensor };
-      return {
-        ...onceki,
-        [olay.dugum]: {
-          ...dugum,
-          [olay.sensor]: birlestir(dugum[olay.sensor], [yeni], LIMIT[olay.sensor]),
-        },
-      };
-    });
-  }, []);
 
   useEffect(() => {
-    if (!anahtar) return;
-    const idler = anahtar.split(",");
     let iptal = false;
-
     const getir = async () => {
-      const gelen = {};
-      await Promise.all(
-        idler.map(async (id) => {
-          const listeler = await Promise.all(SENSORLER.map((s) => okumalariGetir(s, id)));
-          gelen[id] = Object.fromEntries(SENSORLER.map((s, i) => [s, listeler[i]]));
-        })
-      );
-      if (iptal) return;
-      setOkumalar((onceki) => {
-        const sonuc = { ...onceki };
-        for (const id of idler) {
-          const eski = onceki[id] ?? {};
-          sonuc[id] = Object.fromEntries(
-            SENSORLER.map((s) => [
-              s,
-              gelen[id][s] ? birlestir(eski[s], gelen[id][s], LIMIT[s]) : eski[s] ?? [],
-            ])
-          );
-        }
-        return sonuc;
-      });
+      const veri = await jsonGetir("/api/dugumler");
+      if (iptal || !Array.isArray(veri)) return;
+      const yeni = veri.map(donustur);
+      setListe(yeni);
       // Aktif düğüm trend çizgisi için çevrimiçi sayısını kaydet
-      const anSn = Math.floor(Date.now() / 1000);
-      const sayi = idler.filter((id) => {
-        const son = sonZamanBul(gelen[id]);
-        return son != null && anSn - son <= CEVRIMDISI_SANIYE;
-      }).length;
-      setCevrimiciGecmis((g) => [...g, sayi].slice(-9));
+      setCevrimiciGecmis((g) => [...g, yeni.filter((d) => d.cevrimici).length].slice(-9));
     };
-
     getir();
-    const zaman = setInterval(getir, 3000);
+    const zaman = setInterval(getir, YENILEME_MS);
     return () => {
       iptal = true;
       clearInterval(zaman);
     };
-  }, [anahtar]);
+  }, []);
 
-  // Türetilmiş düğüm durumu (her render'da aynı okumalardan hesaplanır)
-  const dugumler = {};
-  for (const id of dugumIdleri) {
-    const o = okumalar[id] ?? {};
-    const sonZaman = sonZamanBul(o);
-    dugumler[id] = {
-      id,
-      dumanSeri: o.duman ?? [],
-      duman: o.duman?.at(-1) ?? null,
-      hareket: o.hareket?.at(-1) ?? null,
-      alev: o.alev?.at(-1) ?? null,
-      sonZaman,
-      cevrimici: sonZaman != null && simdiSn - sonZaman <= CEVRIMDISI_SANIYE,
-    };
-  }
+  // WebSocket'ten gelen olay bir sonraki yoklamayı beklemeden yansısın
+  const okumaEkle = useCallback((olay) => {
+    if (!olay?.dugum || olay.zaman == null) return;
+    setListe((onceki) =>
+      onceki.map((d) => {
+        if (d.id !== olay.dugum) return d;
+        if (olay.sensor === "durum") return { ...d, cevrimici: olay.deger !== 0 };
+        if (!(olay.sensor in { duman: 1, hareket: 1, alev: 1 })) return d;
+        return {
+          ...d,
+          veriYok: false,
+          cevrimici: true,
+          sonZaman: Math.max(d.sonZaman ?? 0, olay.zaman),
+          [olay.sensor]: { deger: olay.deger, zaman: olay.zaman },
+        };
+      })
+    );
+  }, []);
+
+  // Backend'e ulaşılamazsa eski "çevrimiçi" bilgisi sonsuza dek kalmasın
+  const dugumler = liste.map((d) => ({
+    ...d,
+    cevrimici: d.cevrimici && d.sonZaman != null && simdiSn - d.sonZaman <= CEVRIMDISI_SANIYE,
+  }));
 
   return { dugumler, cevrimiciGecmis, okumaEkle };
 }
 
-function sonZamanBul(okuma) {
-  const zamanlar = SENSORLER.map((s) => okuma?.[s]?.at(-1)?.zaman ?? 0);
-  const son = Math.max(0, ...zamanlar);
-  return son || null;
+// Seçili düğümün son ~2 dk'lık MQ-2 okumaları (eski → yeni)
+export function useDumanSerisi(dugum) {
+  const [seri, setSeri] = useState({ dugum: null, veri: [] });
+
+  useEffect(() => {
+    if (!dugum) return;
+    let iptal = false;
+    const getir = async () => {
+      const veri = await jsonGetir(
+        `/api/gecmis?sensor=duman&dugum=${encodeURIComponent(dugum)}&limit=${DUMAN_SERI}`
+      );
+      if (!iptal && Array.isArray(veri)) setSeri({ dugum, veri });
+    };
+    getir();
+    const zaman = setInterval(getir, YENILEME_MS);
+    return () => {
+      iptal = true;
+      clearInterval(zaman);
+    };
+  }, [dugum]);
+
+  // Seçim değişince eski düğümün serisi bir an bile gösterilmesin
+  return seri.dugum === dugum ? seri.veri : [];
 }

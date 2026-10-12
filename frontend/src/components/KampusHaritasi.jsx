@@ -6,6 +6,7 @@ const TIP = {
   alarm: { renk: "#f43f5e", durum: "Alarm", nokta: "n-kirmizi" },
   ok: { renk: "#34d399", durum: "Çevrimiçi", nokta: "n-yesil" },
   off: { renk: "#64748b", durum: "Çevrimdışı", nokta: "" },
+  yok: { renk: "#64748b", durum: "Veri yok", nokta: "" },
 };
 
 const BINALAR = [
@@ -23,18 +24,18 @@ const sureMetni = (sn) => {
   return `${Math.floor(sn / 3600)} sa önce`;
 };
 
-// Yalnızca sabitler.js'de konumu tanımlı düğümler çizilir
+// Yalnızca sabitler.js'de koordinatı tanımlı düğümler çizilir (konum adı backend'den)
 const konumluDugumler = (dugumler) =>
   dugumler
     .filter((d) => DUGUM_KONUMLARI[d.id])
     .map((d) => ({ ...d, ...DUGUM_KONUMLARI[d.id] }));
 
-// dugumler: [{ id, cevrimici, duman, hareket, alev, sonZaman }]
+// dugumler: [{ id, konum, cevrimici, veriYok, duman, hareket, alev, sonZaman }]
 // alarmdakiler: son 5 dk'da kritik olayı olan düğüm id'leri (Set)
 export default function KampusHaritasi({ dugumler, alarmdakiler, secili, onSec, simdiSn }) {
   const noktalar = konumluDugumler(dugumler).map((d) => ({
     ...d,
-    tip: alarmdakiler.has(d.id) ? "alarm" : d.cevrimici ? "ok" : "off",
+    tip: d.veriYok ? "yok" : alarmdakiler.has(d.id) ? "alarm" : d.cevrimici ? "ok" : "off",
     px: (d.x / 100) * 800,
     py: (d.y / 100) * 440,
   }));
@@ -84,15 +85,16 @@ export default function KampusHaritasi({ dugumler, alarmdakiler, secili, onSec, 
               <circle key={`hale-${n.id}`} cx={n.px} cy={n.py} r="70" fill="rgba(244,63,94,.10)" />
             ))}
 
-            {/* Düğüm → Mosquitto akış çizgileri */}
+            {/* Düğüm → Mosquitto akış çizgileri, düğümün durum renginde.
+                Çevrimdışı / veri yok: sönük, kesik ve akışsız. */}
             {noktalar.map((n) =>
-              n.tip === "off" ? (
+              n.tip === "off" || n.tip === "yok" ? (
                 <line key={`hat-${n.id}`} x1={n.px} y1={n.py} x2={HUB.x} y2={HUB.y}
-                  stroke="#3b4660" strokeWidth="2" strokeDasharray="3 6" />
+                  stroke={TIP[n.tip].renk} strokeOpacity="0.35" strokeWidth="2" strokeDasharray="3 6" />
               ) : (
                 <line key={`hat-${n.id}`} className={n.tip === "alarm" ? "akis-hizli" : "akis"}
                   x1={n.px} y1={n.py} x2={HUB.x} y2={HUB.y}
-                  stroke={n.tip === "alarm" ? "#f43f5e" : "#22d3ee"}
+                  stroke={TIP[n.tip].renk}
                   strokeWidth={n.tip === "alarm" ? 3 : 2.5}
                   strokeDasharray="10 18" strokeLinecap="round" />
               )
@@ -116,12 +118,15 @@ export default function KampusHaritasi({ dugumler, alarmdakiler, secili, onSec, 
                 type="button"
                 className="dugum-btn"
                 style={{ left: `${n.x}%`, top: `${n.y}%`, "--renk": renk }}
-                aria-label={`${n.id}, ${n.konum}, ${TIP[n.tip].durum}`}
+                aria-label={`${n.id}, ${n.konum ?? "konum tanımsız"}, ${TIP[n.tip].durum}`}
                 aria-pressed={aktif}
                 onClick={() => onSec(n.id)}
               >
                 <span className={`dugum-nokta ${TIP[n.tip].nokta} ${aktif ? "aktif" : ""}`} />
-                <span className={aktif ? "dugum-etiket aktif" : "dugum-etiket"}>{n.id}</span>
+                <span className={aktif ? "dugum-etiket aktif" : "dugum-etiket"}>
+                  {n.id}
+                  {n.tip === "yok" && <span className="dugum-etiket-not"> · veri yok</span>}
+                </span>
               </button>
             );
           })}
@@ -136,7 +141,7 @@ export default function KampusHaritasi({ dugumler, alarmdakiler, secili, onSec, 
             <div className="detay-ust">
               <div className="baslik-grup">
                 <span className="detay-id">{sec.id}</span>
-                <span className="bolum-alt">{sec.konum}</span>
+                <span className="bolum-alt">{sec.konum ?? "Konum tanımsız"}</span>
               </div>
               <span className="durum-hap" style={{ "--renk": TIP[sec.tip].renk }}>
                 {TIP[sec.tip].durum}

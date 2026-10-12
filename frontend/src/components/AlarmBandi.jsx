@@ -1,9 +1,10 @@
-import { DUGUM_KONUMLARI, SENSOR_AD } from "../sabitler";
+import { SENSOR_AD } from "../sabitler";
 import { cumleDuzeni, saatBicim } from "../hesaplar";
 
 // Son 5 dakikadaki kritik olay için alarm bandı. Onay yalnızca arayüzde gizler.
-export default function AlarmBandi({ olay, onOnayla }) {
-  const konum = DUGUM_KONUMLARI[olay.dugum]?.konum;
+// konumlar: { dugum: konum adı } (/api/dugumler)
+export default function AlarmBandi({ olay, konumlar, onOnayla }) {
+  const konum = konumlar[olay.dugum];
 
   return (
     <div role="alert" className="alarm-bandi">

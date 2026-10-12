@@ -980,6 +980,7 @@ a:focus-visible {
 }
 
 .dugum-etiket.aktif { border-color: var(--renk); }
+.dugum-etiket-not { color: var(--metin-soluk); font-weight: 500; }
 
 .dugum-detay {
   position: absolute;

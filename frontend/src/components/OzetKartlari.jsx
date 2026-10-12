@@ -22,7 +22,7 @@ function Kart({ etiket, sayi, alt, trend, renk, noktalar, vurgulu, sayiRenkli })
   );
 }
 
-// olaylar: analitik listesi (yeni → eski); dugumOzet: { toplam, cevrimici, cevrimdisi[] }
+// olaylar: analitik listesi (yeni → eski); dugumOzet: { toplam, cevrimici, cevrimdisi[], veriYok[] }
 export default function OzetKartlari({ olaylar, simdi, esik, dugumOzet, cevrimiciGecmis }) {
   const simdiSn = Math.floor(simdi.getTime() / 1000);
   const bugun = bugunBaslangicSn(simdi);
@@ -72,8 +72,11 @@ export default function OzetKartlari({ olaylar, simdi, esik, dugumOzet, cevrimic
       sayi: `${dugumOzet.cevrimici}/${dugumOzet.toplam}`,
       alt: dugumOzet.toplam === 0
         ? "Düğüm bilgisi yok"
-        : dugumOzet.cevrimdisi.length
-          ? `${dugumOzet.cevrimdisi.join(", ")} çevrimdışı`
+        : dugumOzet.cevrimdisi.length || dugumOzet.veriYok.length
+          ? [
+              dugumOzet.cevrimdisi.length && `${dugumOzet.cevrimdisi.join(", ")} çevrimdışı`,
+              dugumOzet.veriYok.length && `${dugumOzet.veriYok.join(", ")} veri yok`,
+            ].filter(Boolean).join(" · ")
           : "Tümü çevrimiçi",
       trend: "LWT",
       renk: "#34d399",
