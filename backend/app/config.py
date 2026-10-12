@@ -35,11 +35,32 @@ CEVRIMDISI_SANIYE = int(os.getenv("CEVRIMDISI_SANIYE", "30"))
 # SQLite dosyasının yolu (backend klasöründe kampus.db)
 VERITABANI_YOLU = os.getenv("VERITABANI_YOLU", "kampus.db")
 
-# ---------------- E-posta (SMTP) ----------------
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_KULLANICI = os.getenv("SMTP_KULLANICI", "")
-SMTP_PAROLA = os.getenv("SMTP_PAROLA", "")
-ALARM_ALICI = os.getenv("ALARM_ALICI", "")
-# E-posta gönderimi ayarlar boşsa otomatik devre dışı kalır.
-EPOSTA_AKTIF = bool(SMTP_KULLANICI and SMTP_PAROLA and ALARM_ALICI)
+# ---------------- E-posta bildirimi (SMTP, SSL 465) ----------------
+SMTP_SUNUCU = os.getenv("SMTP_SUNUCU", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_KULLANICI = os.getenv("SMTP_KULLANICI", "").strip()
+# Gmail'de normal parola değil, 16 haneli "uygulama şifresi" kullanılır.
+# Gmail onu boşluklu gösterir; boşluklar burada atılır.
+SMTP_PAROLA = os.getenv("SMTP_PAROLA", "").replace(" ", "")
+# Alıcı boşsa mail gönderen adrese (kendine) gider.
+BILDIRIM_ALICI = os.getenv("BILDIRIM_ALICI", "").strip() or SMTP_KULLANICI
+# Hangi seviyeler mail üretir (virgülle ayrılmış).
+BILDIRIM_SEVIYELER = [s.strip() for s in os.getenv("BILDIRIM_SEVIYELER", "kritik,yuksek").split(",")
+                      if s.strip()]
+# Aynı düğüm + sensör + seviye için iki mail arasındaki en kısa süre (sn).
+BILDIRIM_BEKLEME_SN = int(os.getenv("BILDIRIM_BEKLEME_SN", "300"))
+# Bu düğümlerin olayları mail üretmez (test_senaryolari.py canlı testleri).
+BILDIRIM_HARIC_DUGUMLER = {"test_dugum"}
+# Kullanıcı/parola boşsa bildirim sessizce devre dışı kalır.
+BILDIRIM_AKTIF = (os.getenv("BILDIRIM_AKTIF", "true").strip().lower() in ("1", "true", "evet")
+                  and bool(SMTP_KULLANICI and SMTP_PAROLA))
+
+# Maildeki panel bağlantısı
+PANEL_URL = os.getenv("PANEL_URL", "http://localhost:5173")
+
+# Düğüm -> kampüs konumu (frontend/src/sabitler.js DUGUM_KONUMLARI ile aynı tutulmalı)
+DUGUM_KONUMLARI = {
+    "dugum1": "Mühendislik Fakültesi",
+    "dugum2": "Kütüphane",
+    "dugum3": "Yurtlar",
+}

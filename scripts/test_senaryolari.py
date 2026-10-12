@@ -1,7 +1,8 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T5).
+Test senaryoları scripti (rapor Tablo 6, T1-T6).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
-işleyip işlemediğini API üzerinden doğrular.
+işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
+göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
 
 Çalıştırmadan önce: broker + backend çalışıyor olmalı, sahte veri üreteci
 KAPATILMALI (test sonuçlarını kirletmemesi için).
@@ -17,6 +18,7 @@ import time
 import sys
 import os
 import sqlite3
+import threading
 import urllib.request
 
 import paho.mqtt.client as mqtt
@@ -131,6 +133,80 @@ def test_alarm_yok(client, no, ad, sensor, deger):
     return False
 
 
+def test_bildirim():
+    """
+    T6: Gerçek mail göndermeden (SMTP mock) bildirim kurallarını doğrular.
+    MQTT dinleyicinin mesaj işleyicisi süreç içinde, sahte DB ile çağrılır.
+    """
+    from types import SimpleNamespace
+    from unittest import mock
+    from app import bildirim, mqtt_dinleyici
+
+    print("\n[T6] Bildirim sistemi (e-posta, SMTP taklit edilerek)")
+    dugum = "t6_dugum"
+    saat = [1000.0]
+
+    def yavas_gonderim(*args):
+        time.sleep(0.5)  # yavaş SMTP sunucusu
+        return True
+
+    def mesaj_isle(sensor, deger):
+        """Mesajı işler, dinleyicinin ne kadar beklediğini döndürür."""
+        msg = SimpleNamespace(topic=f"kampus/guvenlik/{dugum}/{sensor}",
+                              payload=json.dumps({"deger": deger, "zaman": int(time.time())}).encode())
+        bas = time.perf_counter()
+        mqtt_dinleyici._on_message(mock.Mock(), None, msg)
+        sure = time.perf_counter() - bas
+        for t in threading.enumerate():
+            if t.name == "bildirim":
+                t.join(5)
+        return sure
+
+    def sahte_olay_ekle(dugum_, sensor, deger, seviye, mesaj, zaman):
+        return {"id": 0, "dugum": dugum_, "sensor": sensor, "deger": deger,
+                "seviye": seviye, "mesaj": mesaj, "zaman": zaman}
+
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(kosul)
+
+    with mock.patch.object(bildirim, "_smtp_gonder", side_effect=yavas_gonderim) as smtp, \
+            mock.patch.object(bildirim, "_saat", lambda: saat[0]), \
+            mock.patch.dict(bildirim._bekleme, clear=True), \
+            mock.patch.object(config, "BILDIRIM_AKTIF", True), \
+            mock.patch.object(mqtt_dinleyici.veritabani, "olay_ekle", sahte_olay_ekle), \
+            mock.patch.object(mqtt_dinleyici.veritabani, "gecmis_ekle", lambda *a: None):
+
+        sure = mesaj_isle("alev", 1)
+        kontrol("kritik (alev) olayında mail gönderildi", smtp.call_count == 1)
+        kontrol(f"konu doğru: {smtp.call_args[0][0] if smtp.call_args else '-'}",
+                bool(smtp.call_args) and smtp.call_args[0][0].startswith("[KRİTİK] Alev algılandı"))
+        kontrol(f"dinleyici beklemedi ({sure * 1000:.0f} ms, SMTP 500 ms sürüyor)", sure < 0.2)
+
+        mesaj_isle("hareket", 1)
+        kontrol("orta (hareket) olayında mail gönderilmedi", smtp.call_count == 1)
+
+        mesaj_isle("duman", 2500)
+        kontrol("yüksek (duman) olayında mail gönderildi", smtp.call_count == 2)
+
+        saat[0] += 10
+        mesaj_isle("alev", 1)
+        kontrol(f"bekleme süresinde ({config.BILDIRIM_BEKLEME_SN} sn) ikinci alev maili engellendi",
+                smtp.call_count == 2)
+
+        saat[0] += config.BILDIRIM_BEKLEME_SN
+        mesaj_isle("alev", 1)
+        metin = smtp.call_args[0][2] if smtp.call_count == 3 else ""
+        kontrol("süre dolunca yeni mail gitti, bastırılan olay yazıldı (+1 benzer olay)",
+                smtp.call_count == 3 and "+1 benzer olay" in metin)
+
+    basarili = all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
 def main():
     print("=" * 60)
     print("KAMPÜS GÜVENLİK SİSTEMİ - TEST SENARYOLARI (Tablo 6)")
@@ -182,11 +258,7 @@ def testleri_calistir(client):
         print(f"    ✗ BAŞARISIZ ({e})")
         sonuclar.append(("T5", "Web arayüzü / API", False))
 
-    # T6: Bildirim (henüz e-posta yok)
-    print("\n[T6] Bildirim sistemi (e-posta)")
-    print("    E-posta modülü henüz eklenmedi. Bu test e-posta entegrasyonu")
-    print("    tamamlanınca çalıştırılacak. (BEKLEMEDE)")
-    sonuclar.append(("T6", "Bildirim (e-posta)", None))
+    sonuclar.append(("T6", "Bildirim (e-posta)", test_bildirim()))
 
     # Özet
     print("\n" + "=" * 60)

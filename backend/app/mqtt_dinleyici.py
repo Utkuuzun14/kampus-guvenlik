@@ -9,7 +9,7 @@ import time
 import threading
 import paho.mqtt.client as mqtt
 
-from app import config, kurallar, veritabani
+from app import bildirim, config, kurallar, veritabani
 
 # Yeni bir olay oluştuğunda haber verilecek dış fonksiyon (main.py bağlayacak).
 # WebSocket ile React'e canlı iletim için kullanılacak. Şimdilik None.
@@ -84,6 +84,13 @@ def _on_message(client, userdata, msg):
                 olay_geri_cagirma(olay)
             except Exception as e:
                 print(f"[WS] geri çağırma hatası: {e}")
+
+        # E-posta: gönderim ayrı thread'de, dinleyici beklemez
+        if kurallar.bildirim_gerekli_mi(seviye):
+            try:
+                bildirim.gonder(olay)
+            except Exception as e:
+                print(f"[BILDIRIM] gonder hatası: {e}")
 
 
 def istemci_olustur():

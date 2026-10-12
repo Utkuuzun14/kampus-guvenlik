@@ -43,5 +43,5 @@ def degerlendir(sensor, deger):
 
 
 def bildirim_gerekli_mi(seviye):
-    """E-posta bildirimi bu seviyeler için gönderilir."""
-    return seviye in ("yuksek", "kritik")
+    """E-posta bildirimi BILDIRIM_SEVIYELER'deki seviyeler için gönderilir."""
+    return seviye in config.BILDIRIM_SEVIYELER

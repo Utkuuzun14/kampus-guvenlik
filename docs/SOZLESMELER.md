@@ -19,7 +19,7 @@ FastAPI backend  (kural motoru + SQLite + REST/WebSocket)
    │  REST (geçmiş veri)  +  WebSocket (canlı olay)
    ▼
 React dashboard
-   +  kritik olayda → e-posta (SMTP)
+   +  kritik/yüksek olayda → e-posta (SMTP, bkz. §8)
 ```
 
 ---
@@ -147,3 +147,28 @@ WebSocket mesaj formatı:
 - Geliştirme sonrası **TLS** (şifreli MQTT) eklenecek — rapor 2.6 ile uyumlu.
 - QoS 1: kritik mesajların en az bir kez ulaşması garanti.
 - LWT: kart ani kopunca broker otomatik "offline" yayınlar.
+
+---
+
+## 8. Bildirim kuralları (e-posta)
+
+Kod: `backend/app/bildirim.py`, ayarlar: `backend/.env` (şablon: `backend/.env.example`).
+
+- **Hangi olaylar:** seviyesi `BILDIRIM_SEVIYELER` içinde olanlar (varsayılan
+  `kritik,yuksek`, yani alev ve duman eşik aşımı). Olay DB'ye yazıldıktan sonra tetiklenir.
+- **Spam önleme:** aynı `(düğüm, sensör, seviye)` için `BILDIRIM_BEKLEME_SN`
+  (varsayılan 300 sn) içinde ikinci mail gitmez. Bu sürede bastırılan olay
+  sayısı bir sonraki mailde "Son 5 dk'da +N benzer olay" olarak yazılır.
+- **Engellememe:** gönderim ayrı bir thread'de yapılır; MQTT dinleyici beklemez.
+- **Devre dışı kalma:** `SMTP_KULLANICI` veya `SMTP_PAROLA` boşsa ya da
+  `BILDIRIM_AKTIF=false` ise mail gönderilmez; başlangıçta tek uyarı loglanır.
+  `BILDIRIM_ALICI` boşsa mail gönderen adrese gider.
+- **Hata:** yanlış parola / bağlantı yok durumunda hata loglanır, tekrar
+  denenmez; bekleme süresi denemeyle başladığı için her olayda yeniden denenmez.
+- **Hariç düğüm:** `test_dugum` (canlı test senaryoları) mail üretmez.
+- **Gönderim:** SMTP SSL (465), UTF-8, HTML + düz metin. Konu biçimi:
+  `[KRİTİK] Alev algılandı — dugum1 (Mühendislik Fakültesi)`.
+  Düğüm konumları `config.DUGUM_KONUMLARI`'ndan gelir (frontend `sabitler.js` ile aynı tutulur).
+- **Gizlilik:** parola ve adresler yalnızca `backend/.env`'de durur (git'e girmez).
+  Gmail için normal parola değil, 16 haneli **uygulama şifresi** kullanılır.
+- **Elle doğrulama:** `python scripts/eposta_test.py` örnek bir kritik mail gönderir.
