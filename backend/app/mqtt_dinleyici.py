@@ -15,6 +15,9 @@ from app import bildirim, config, kurallar, veritabani
 # WebSocket ile React'e canlı iletim için kullanılacak. Şimdilik None.
 olay_geri_cagirma = None
 
+# Backend'in broker bağlantısı (/api/saglik bunu döndürür)
+bagli = False
+
 
 def _dugum_cikar(topic):
     """kampus/guvenlik/<dugum>/<sensor> -> (dugum, sensor)"""
@@ -25,6 +28,8 @@ def _dugum_cikar(topic):
 
 
 def _on_connect(client, userdata, flags, reason_code, properties):
+    global bagli
+    bagli = reason_code == 0
     if reason_code == 0:
         print("[MQTT] Broker'a bağlanıldı.")
         for konu, qos in config.MQTT_KONULAR:
@@ -32,6 +37,12 @@ def _on_connect(client, userdata, flags, reason_code, properties):
             print(f"[MQTT] Abone olundu: {konu} (QoS {qos})")
     else:
         print(f"[MQTT] Bağlantı hatası, kod: {reason_code}")
+
+
+def _on_disconnect(client, userdata, flags, reason_code, properties):
+    global bagli
+    bagli = False
+    print(f"[MQTT] Broker bağlantısı koptu (kod: {reason_code}), yeniden denenecek.")
 
 
 def _on_message(client, userdata, msg):
@@ -103,6 +114,7 @@ def istemci_olustur():
     client.username_pw_set(config.MQTT_KULLANICI, config.MQTT_PAROLA)
     client.on_connect = _on_connect
     client.on_message = _on_message
+    client.on_disconnect = _on_disconnect
     return client
 
 

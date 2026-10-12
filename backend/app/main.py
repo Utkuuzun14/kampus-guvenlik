@@ -1,11 +1,12 @@
 """
 FastAPI ana uygulaması.
 - Açılışta veritabanını kurar ve MQTT dinleyiciyi arka planda başlatır.
-- REST uçları: /api/olaylar, /api/durum, /api/saglik
+- REST uçları: /api/olaylar, /api/durum, /api/dugumler, /api/gecmis, /api/saglik
 - WebSocket /ws: yeni olayları bağlı istemcilere canlı iletir.
 """
 import asyncio
 import json
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -75,7 +76,8 @@ app.add_middleware(
 
 @app.get("/api/saglik")
 def saglik():
-    return {"durum": "calisiyor"}
+    """Servis ayakta mı + backend'in MQTT broker bağlantısı."""
+    return {"durum": "calisiyor", "mqtt": "bagli" if mqtt_dinleyici.bagli else "kopuk"}
 
 
 @app.get("/api/olaylar")
@@ -86,13 +88,12 @@ def olaylar(limit: int = 50):
 @app.get("/api/durum")
 def durum():
     """Düğüm durumu: son olay, çevrimiçi mi, son görülme."""
-    import time as _t
     son = veritabani.son_olaylar(1)
     son_olay = son[0] if son else None
     # Son veri zamanı (sensor_gecmis'ten en güncel kayıt)
     son_veri = veritabani.sensor_gecmis_getir("duman", "dugum1", 1)
     son_zaman = son_veri[-1]["zaman"] if son_veri else None
-    simdi = int(_t.time())
+    simdi = int(time.time())
     cevrimici = False
     gecen_sn = None
     if son_zaman:
@@ -105,6 +106,46 @@ def durum():
         "son_gorulme": son_zaman,
         "gecen_saniye": gecen_sn,
     }
+
+
+@app.get("/api/dugumler")
+def dugumler():
+    """
+    Bilinen tüm düğümler: config.DUGUM_KONUMLARI + sensor_gecmis'te görülenler.
+    Çevrimdışı: en son kayıt durum=0 (LWT veya kapanış) ya da
+    CEVRIMDISI_SANIYE içinde veri yok. Hiç veri yoksa veri_yok=True.
+    """
+    simdi = int(time.time())
+    son = {}  # dugum -> {sensor: satir}
+    for satir in veritabani.son_okumalar():
+        son.setdefault(satir["dugum"], {})[satir["sensor"]] = satir
+
+    idler = list(config.DUGUM_KONUMLARI) + sorted(set(son) - set(config.DUGUM_KONUMLARI))
+    sonuc = []
+    for dugum in idler:
+        okumalar = son.get(dugum, {})
+        durum = okumalar.get("durum")
+        # "offline" satırı düğümün kendisinden gelen veri sayılmaz
+        veri = [o for sensor, o in okumalar.items() if not (sensor == "durum" and o["deger"] == 0)]
+        son_veri = max((o["zaman"] for o in veri), default=None)
+        son_id = max((o["id"] for o in okumalar.values()), default=None)
+        offline_son = durum is not None and durum["deger"] == 0 and durum["id"] == son_id
+        cevrimici = (not offline_son and son_veri is not None
+                     and simdi - son_veri <= config.CEVRIMDISI_SANIYE)
+        sonuc.append({
+            "id": dugum,
+            "konum": config.DUGUM_KONUMLARI.get(dugum),
+            "cevrimici": cevrimici,
+            "veri_yok": not okumalar,
+            "son_veri_zamani": son_veri,
+            "son_durum": None if durum is None else ("online" if durum["deger"] else "offline"),
+            "son": {
+                sensor: ({"deger": okumalar[sensor]["deger"], "zaman": okumalar[sensor]["zaman"]}
+                         if sensor in okumalar else None)
+                for sensor in ("duman", "hareket", "alev")
+            },
+        })
+    return sonuc
 
 
 @app.get("/api/gecmis")

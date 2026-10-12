@@ -131,8 +131,34 @@ Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için f
 
 ### REST uç noktaları
 - `GET /api/olaylar?limit=50` → son olaylar (JSON dizi)
-- `GET /api/durum` → tüm düğümlerin anlık durumu (online/offline, son değerler)
-- `GET /api/saglik` → servis sağlık kontrolü
+- `GET /api/durum` → dugum1 durumu ve duman eşiği (`esik_duman`); eski uç, geriye uyumluluk için
+- `GET /api/dugumler` → bilinen tüm düğümler (aşağıda)
+- `GET /api/gecmis?sensor=duman&dugum=dugum1&limit=50` → bir sensörün son ham okumaları (eski → yeni)
+- `GET /api/saglik` → `{"durum": "calisiyor", "mqtt": "bagli" | "kopuk"}`.
+  `mqtt`, backend'in broker bağlantısıdır; paneldeki "Broker" ışığı buna bakar.
+  Tek bir düğümün kopması bu değeri etkilemez.
+
+### `GET /api/dugumler`
+Düğüm listesi = `config.DUGUM_KONUMLARI` (hiç veri göndermemiş olsa da) +
+`sensor_gecmis`'te görülen diğer düğümler. Konum adı için tek kaynak backend'dir.
+
+```json
+[{
+  "id": "dugum3", "konum": "Yurtlar",
+  "cevrimici": false, "veri_yok": false,
+  "son_veri_zamani": 1730000000, "son_durum": "offline",
+  "son": { "duman": {"deger": 512, "zaman": 1730000000},
+           "hareket": {"deger": 1, "zaman": 1729999990}, "alev": null }
+}]
+```
+
+- `cevrimici`: en son kayıt `durum=offline` (LWT veya temiz kapanış) **değilse** ve
+  son veri `CEVRIMDISI_SANIYE` (30 sn) içindeyse `true`.
+- `veri_yok`: düğümden hiç kayıt yok (panelde gri, "veri yok"). Böyle bir düğüm
+  için "çevrimdışı" olayı ya da e-posta üretilmez; olay yalnızca gelen
+  `durum=offline` mesajından doğar.
+- `son_veri_zamani`: düğümün kendisinden gelen son mesaj (LWT sayılmaz).
+- `konum`: tanımsız düğümde `null`.
 
 ### WebSocket
 - `WS /ws` → backend, yeni bir olay/alarm oluştuğunda bu kanaldan React'e

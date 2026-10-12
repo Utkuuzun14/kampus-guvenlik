@@ -44,6 +44,11 @@ def kur():
                 zaman INTEGER
             )
         """)
+        # /api/dugumler her düğüm+sensörün en son satırını arar
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS ix_gecmis_dugum_sensor
+            ON sensor_gecmis (dugum, sensor, id)
+        """)
 
 
 def olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman=None):
@@ -94,3 +99,14 @@ def sensor_gecmis_getir(sensor, dugum="dugum1", limit=50):
         ).fetchall()
     # En son 'limit' kaydı aldık; grafik için eski->yeni sırala
     return [dict(s) for s in reversed(satirlar)]
+
+
+def son_okumalar():
+    """Her (düğüm, sensör) çiftinin en son ham okumasını döndürür."""
+    with baglanti() as conn:
+        satirlar = conn.execute(
+            "SELECT g.* FROM sensor_gecmis g JOIN ("
+            "  SELECT MAX(id) AS id FROM sensor_gecmis GROUP BY dugum, sensor"
+            ") s ON g.id = s.id"
+        ).fetchall()
+    return [dict(s) for s in satirlar]
