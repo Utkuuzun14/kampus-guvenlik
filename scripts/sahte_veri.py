@@ -12,8 +12,9 @@ tetiklenir:
     paneldeki "son ölçüm" gerçekten son durumu gösterir.
   - Alev kendiliğinden üretilmez (yalnızca senaryo ile).
   - Duman eşik aşımı düğüm başına ~10-15 dk'da bir, 2-3 ölçümlük kısa bir tepe.
-  - dugum1 (Mühendislik Fakültesi): orta yoğunlukta hareket
-  - dugum2 (Kütüphane): sık hareket, düşük duman
+  - Hareket seyrektir: her 3 sn'lik turda dugum2 %10, diğerleri %5 (izinsiz
+    giriş demosu senaryo.py hareket ile)
+  - dugum2 (Kütüphane): en düşük duman seviyesi
   - dugum3 (Yurtlar): 3-5 dk'da bir bağlantısı kopar (LWT tetiklenir),
     30-60 sn sonra geri bağlanıp "online" yayınlar
 
@@ -50,12 +51,12 @@ KONTROL_KONU = "kampus/demo/{dugum}/senaryo"
 # Düğüm profilleri. p_hareket: her 3 sn'lik turda hareket=1 olasılığı.
 PROFILLER = {
     "dugum1": {"duman_normal": (200, 800), "duman_alarm": (1900, 3000),
-               "p_hareket": 0.25, "kopma": None},
+               "p_hareket": 0.05, "kopma": None},
     "dugum2": {"duman_normal": (150, 500), "duman_alarm": (1850, 2400),
-               "p_hareket": 0.60, "kopma": None},
+               "p_hareket": 0.10, "kopma": None},
     # kopma: (bağlı kalma sn aralığı, kopuk kalma sn aralığı)
     "dugum3": {"duman_normal": (200, 700), "duman_alarm": (1900, 2800),
-               "p_hareket": 0.30, "kopma": ((180, 300), (30, 60))},
+               "p_hareket": 0.05, "kopma": ((180, 300), (30, 60))},
 }
 
 _yazdir_kilit = threading.Lock()
