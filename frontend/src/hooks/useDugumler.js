@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { API, CEVRIMDISI_SANIYE } from "../sabitler";
 
-// Tek kaynak: /api/dugumler. Düğüm listesi, konum adı, çevrimiçi durumu ve son
-// değerler buradan gelir; harita, detay kartı ve "Aktif düğüm" kartı aynı
-// listeyi okur. Duman serisi (gösterge + küçük grafik) yalnızca seçili düğüm
-// için ayrıca çekilir (useDumanSerisi).
+// Tek kaynak: /api/dugumler. Düğüm listesi, konum adı, çevrimiçi durumu ve SON
+// ÖLÇÜMLER (PIR, MQ-2, Alev) yalnızca buradan gelir; gösterge, harita detay
+// kartı ve "Aktif düğüm" kartı aynı değeri gösterir. WebSocket olayları ölçüm
+// değerini değiştirmez (olay akışı/tablo içindir). Küçük grafiğin geçmişi
+// useDumanSerisi ile çekilir ve son noktası bu son ölçüme hizalanır.
 const YENILEME_MS = 3000;
 const DUMAN_SERI = 40; // ~2 dk (3 sn aralık)
 
@@ -51,36 +52,19 @@ export default function useDugumler(simdiSn) {
     };
   }, []);
 
-  // WebSocket'ten gelen olay bir sonraki yoklamayı beklemeden yansısın
-  const okumaEkle = useCallback((olay) => {
-    if (!olay?.dugum || olay.zaman == null) return;
-    setListe((onceki) =>
-      onceki.map((d) => {
-        if (d.id !== olay.dugum) return d;
-        if (olay.sensor === "durum") return { ...d, cevrimici: olay.deger !== 0 };
-        if (!(olay.sensor in { duman: 1, hareket: 1, alev: 1 })) return d;
-        return {
-          ...d,
-          veriYok: false,
-          cevrimici: true,
-          sonZaman: Math.max(d.sonZaman ?? 0, olay.zaman),
-          [olay.sensor]: { deger: olay.deger, zaman: olay.zaman },
-        };
-      })
-    );
-  }, []);
-
   // Backend'e ulaşılamazsa eski "çevrimiçi" bilgisi sonsuza dek kalmasın
   const dugumler = liste.map((d) => ({
     ...d,
     cevrimici: d.cevrimici && d.sonZaman != null && simdiSn - d.sonZaman <= CEVRIMDISI_SANIYE,
   }));
 
-  return { dugumler, cevrimiciGecmis, okumaEkle };
+  return { dugumler, cevrimiciGecmis };
 }
 
-// Seçili düğümün son ~2 dk'lık MQ-2 okumaları (eski → yeni)
-export function useDumanSerisi(dugum) {
+// Seçili düğümün son ~2 dk'lık MQ-2 okumaları (eski → yeni). sonOlcum
+// (/api/dugumler) verilirse seri ona hizalanır: ondan yeni noktalar atılır,
+// eksikse eklenir. Böylece grafiğin son noktası gösterge ve kartla aynıdır.
+export function useDumanSerisi(dugum, sonOlcum) {
   const [seri, setSeri] = useState({ dugum: null, veri: [] });
 
   useEffect(() => {
@@ -101,5 +85,8 @@ export function useDumanSerisi(dugum) {
   }, [dugum]);
 
   // Seçim değişince eski düğümün serisi bir an bile gösterilmesin
-  return seri.dugum === dugum ? seri.veri : [];
+  const veri = seri.dugum === dugum ? seri.veri : [];
+  if (!sonOlcum) return veri;
+  const onceki = veri.filter((o) => o.zaman < sonOlcum.zaman);
+  return [...onceki, { zaman: sonOlcum.zaman, deger: sonOlcum.deger }].slice(-DUMAN_SERI);
 }

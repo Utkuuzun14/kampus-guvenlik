@@ -99,7 +99,6 @@ function App() {
           if (mesaj.tip === "olay" && mesaj.veri) {
             setOlaylar((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, 50));
             setAnalitik((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, ANALITIK_LIMIT));
-            okumaEkle(mesaj.veri); // gösterge, grafik ve harita aynı anda güncellenir
           }
         } catch (e) {
           console.error("WS mesaj çözme hatası:", e);
@@ -158,7 +157,7 @@ function App() {
   const esik = durum?.esik_duman ?? ESIK_DUMAN_VARSAYILAN;
 
   // Düğüm listesi /api/dugumler'den (alarm üretmemiş ve hiç veri göndermemiş düğümler dahil)
-  const { dugumler: dugumListesi, cevrimiciGecmis, okumaEkle } = useDugumler(simdiSn);
+  const { dugumler: dugumListesi, cevrimiciGecmis } = useDugumler(simdiSn);
   const dugumOzet = {
     toplam: dugumListesi.length,
     cevrimici: dugumListesi.filter((d) => d.cevrimici).length,
@@ -181,8 +180,10 @@ function App() {
     haritadakiler.find((id) => alarmdakiler.has(id)) ||
     haritadakiler[0] ||
     null;
-  // Gösterge ve küçük grafik haritada seçili düğümü gösterir
-  const dumanSeri = useDumanSerisi(gosterilenDugum);
+  // Gösterge ve küçük grafik haritada seçili düğümü gösterir. Gösterge değeri,
+  // detay kartıyla aynı son ölçüm (/api/dugumler); grafik onun geçmişi.
+  const sonDuman = dugumListesi.find((d) => d.id === gosterilenDugum)?.duman ?? null;
+  const dumanSeri = useDumanSerisi(gosterilenDugum, sonDuman);
   const dumanSon60 = dumanSeri.filter((o) => simdiSn - o.zaman <= 60);
 
   const tehdit = tehditHesapla(kaynak, simdiSn, onaylananKimlik);
@@ -250,7 +251,7 @@ function App() {
             simdiSn={simdiSn}
           />
           <div className="sag-sutun">
-            <DumanGostergesi veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
+            <DumanGostergesi son={sonDuman?.deger ?? null} veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
             <OlayAkisi olaylar={olaylar} konumlar={konumlar} />
           </div>
         </section>

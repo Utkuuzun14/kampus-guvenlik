@@ -11,9 +11,9 @@ const yayNoktasi = (oran, r) => {
 
 const sinirla = (v) => Math.min(1, Math.max(0, v));
 
-// veri: son 60 sn'lik MQ-2 okumaları (eski → yeni)
-export default function DumanGostergesi({ veri, esik, dugum }) {
-  const son = veri.length ? veri[veri.length - 1].deger : null;
+// son: düğümün son MQ-2 ölçümü (/api/dugumler; harita detay kartıyla aynı kaynak)
+// veri: son 60 sn'lik MQ-2 okumaları (eski → yeni), tepe kutusu ve grafik için
+export default function DumanGostergesi({ son, veri, esik, dugum }) {
   const oran = son == null ? 0 : sinirla(son / OLCEK);
   const esikOran = sinirla(esik / OLCEK);
   const [x1, y1] = yayNoktasi(esikOran, 80);
