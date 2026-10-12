@@ -37,6 +37,14 @@ Kök önek: `kampus/guvenlik`. Her sensör düğümünün bir `dugum_id`'si vard
 | `kampus/guvenlik/<dugum_id>/durum`   | yukarı | ESP32 | Cihaz çevrimiçi/çevrimdışı (LWT bunu kullanır) |
 | `kampus/guvenlik/<dugum_id>/alarm`   | aşağı  | backend | Merkezi servisin ürettiği alarm kararı |
 
+Demo kontrol konusu (yalnızca sahte üreteç ve `scripts/senaryo.py`; backend dinlemez,
+gerçek firmware kullanmaz): `kampus/demo/<dugum_id>/senaryo` →
+`{"komut": "duraklat", "sure": 120}`, `{"komut": "devam"}`, `{"komut": "kopma", "sure": 30}`.
+
+Ölçüm yayını: düğüm her turda (3 sn) duman, hareket (0/1) ve alev (0/1) ölçümünü
+yayınlar; yalnızca 1 gönderilseydi paneldeki "son ölçüm" eski bir alarmı göstermeye
+devam ederdi. Alarm olayı yalnızca kuralı sağlayan ölçümden doğar (§4).
+
 Backend, gelen tüm sensör verilerini tek abonelikle yakalar:
 `kampus/guvenlik/+/hareket`, `kampus/guvenlik/+/duman`, vb. (`+` = tek seviye joker).
 
