@@ -120,7 +120,7 @@ export const KUS_KROKI = (
       <text x="480" y="972" fill="#a7f3d0" fontSize="26">Halı sahalar</text>
       <text x="1240" y="300" textAnchor="middle" fill="#c9d4e8" fontSize="24">Otopark</text>
       <text x="1690" y="250" textAnchor="middle" fill="#a7f3d0" fontSize="24">Park</text>
-      <text x="1245" y="130" textAnchor="middle" fill="#e6edf7" fontSize="26">Lojmanlar</text>
+      <text x="1245" y="130" textAnchor="middle" fill="#e6edf7" fontSize="26">Yurt</text>
       <text x="40" y="150" fill="#8b9bb8" fontSize="24">Sanayi bölgesi · kampüs dışı</text>
       <text x="1650" y="760" textAnchor="middle" fill="#6ee7b7" fontSize="24">Ağaçlık alan</text>
       <text x="1010" y="640" fill="#94a3b8" fontSize="20">Kapalı yol</text>
@@ -159,7 +159,7 @@ export const KUS_FOTO = (
       <text x="480" y="972" fill="#a7f3d0" fontSize="26">Halı sahalar</text>
       <text x="1240" y="300" textAnchor="middle" fill="#c9d4e8" fontSize="24">Otopark</text>
       <text x="1700" y="350" textAnchor="middle" fill="#a7f3d0" fontSize="24">Park</text>
-      <text x="1245" y="130" textAnchor="middle" fill="#e6edf7" fontSize="26">Lojmanlar</text>
+      <text x="1245" y="130" textAnchor="middle" fill="#e6edf7" fontSize="26">Yurt</text>
       <text x="40" y="120" fill="#8b9bb8" fontSize="24">Sanayi bölgesi · kampüs dışı</text>
       <text x="1650" y="760" textAnchor="middle" fill="#6ee7b7" fontSize="24">Ağaçlık alan</text>
     </g>
@@ -262,7 +262,7 @@ export const PERSP_KROKI = (
       <text x="660" y="660" textAnchor="middle" fill="#c9d4e8" fontSize="22">Kapalı yol</text>
       <text x="1380" y="1010" textAnchor="middle" fill="#c9d4e8" fontSize="26">Otopark</text>
       <text x="1100" y="130" textAnchor="middle" fill="#8b9bb8" fontSize="24">Sanayi bölgesi · kampüs dışı</text>
-      <text x="1975" y="950" textAnchor="end" fill="#e6edf7" fontSize="22">Lojmanlar → kadraj dışı</text>
+      <text x="1975" y="950" textAnchor="end" fill="#e6edf7" fontSize="22">Yurt → kadraj dışı</text>
     </g>
   </>
 );
@@ -300,7 +300,7 @@ export const PERSP_FOTO = (
       <text x="660" y="660" textAnchor="middle" fill="#c9d4e8" fontSize="22">Kapalı yol</text>
       <text x="1380" y="1010" textAnchor="middle" fill="#c9d4e8" fontSize="26">Otopark</text>
       <text x="1100" y="130" textAnchor="middle" fill="#8b9bb8" fontSize="24">Sanayi bölgesi · kampüs dışı</text>
-      <text x="1975" y="950" textAnchor="end" fill="#e6edf7" fontSize="22">Lojmanlar → kadraj dışı</text>
+      <text x="1975" y="950" textAnchor="end" fill="#e6edf7" fontSize="22">Yurt → kadraj dışı</text>
     </g>
   </>
 );

@@ -54,12 +54,12 @@ export const DUGUM_KONUMLARI = {
   kusbakisi: {
     dugum1: { x: 690, y: 400 }, // Ana Bina · A Kanadı
     dugum2: { x: 1297, y: 430 }, // Spor Kompleksi
-    dugum3: { x: 1245, y: 62 }, // Lojmanlar
+    dugum3: { x: 1245, y: 62 }, // Yurt Binası
   },
   perspektif: {
     dugum1: { x: 850, y: 450 },
     dugum2: { x: 630, y: 825 },
-    dugum3: { x: 1930, y: 880 }, // Lojmanlar kadraj dışında; düğüm sağ kenarda
+    dugum3: { x: 1930, y: 880 }, // Yurt kadraj dışında; düğüm sağ kenarda
   },
 };
 

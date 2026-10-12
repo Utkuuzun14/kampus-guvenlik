@@ -62,7 +62,7 @@ Komutlar proje kökünden, backend venv aktifken çalıştırılır.
    60 sn sonra duman düşer, alev "Yok" olur. Alarm bandındaki "Onayla" ile alarm
    onaylanır.
 5. **Bağlantı kopması (LWT):** `python scripts/senaryo.py kopma dugum3`
-   → Lojmanlar düğümü DISCONNECT göndermeden düşer, broker LWT yayınlar: "Aktif düğüm
+   → Yurt Binası düğümü DISCONNECT göndermeden düşer, broker LWT yayınlar: "Aktif düğüm
    2/3", dugum3 çizgisi sönük gri. 30 sn sonra geri gelir ve 3/3 olur.
 6. **Testler (isteğe bağlı):** üreteci kapatıp `python scripts/test_senaryolari.py`
    (T1-T7, sonuçlar `docs/TEST_SONUCLARI.md`).

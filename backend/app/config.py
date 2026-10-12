@@ -65,5 +65,5 @@ PANEL_URL = os.getenv("PANEL_URL", "http://localhost:5173")
 DUGUM_KONUMLARI = {
     "dugum1": "Ana Bina · A Kanadı",
     "dugum2": "Spor Kompleksi",
-    "dugum3": "Lojmanlar",
+    "dugum3": "Yurt Binası",
 }

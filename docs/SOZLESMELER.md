@@ -170,7 +170,7 @@ Düğüm listesi = `config.DUGUM_KONUMLARI` (hiç veri göndermemiş olsa da) +
 
 ```json
 [{
-  "id": "dugum3", "konum": "Lojmanlar",
+  "id": "dugum3", "konum": "Yurt Binası",
   "cevrimici": false, "veri_yok": false,
   "son_veri_zamani": 1730000000, "son_durum": "offline",
   "son": { "duman": {"deger": 512, "zaman": 1730000000},

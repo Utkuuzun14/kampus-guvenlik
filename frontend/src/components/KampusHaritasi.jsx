@@ -17,11 +17,11 @@ const ACILAR = {
     zemin: {
       kroki: {
         katman: KUS_KROKI, haleSaydam: 0.18,
-        aria: "Kampüs krokisi (hava fotoğrafından çizilmiş): ana bina A Kanadı, Rotunda ve B Kanadı, T şeklinde kapalı yol, üç halı saha, spor kompleksi, otopark, park, lojmanlar ve sanayi bölgesi",
+        aria: "Kampüs krokisi (hava fotoğrafından çizilmiş): ana bina A Kanadı, Rotunda ve B Kanadı, T şeklinde kapalı yol, üç halı saha, spor kompleksi, otopark, park, yurt ve sanayi bölgesi",
       },
       foto: {
         katman: KUS_FOTO, haleSaydam: 0.16, foto: "/kampus-hava.jpg",
-        aria: "Kampüs hava görünümü: ana bina (A Kanadı, Rotunda, B Kanadı), kapalı yürüyüş yolu, halı sahalar, spor kompleksi, otopark, park ve lojmanlar",
+        aria: "Kampüs hava görünümü: ana bina (A Kanadı, Rotunda, B Kanadı), kapalı yürüyüş yolu, halı sahalar, spor kompleksi, otopark, park ve yurt",
       },
     },
   },
