@@ -13,7 +13,7 @@ import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
 import useDugumler, { useDumanSerisi } from "./hooks/useDugumler";
 import {
-  API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, DUGUM_KONUMLARI,
+  API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, haritadaMi,
 } from "./sabitler";
 import {
   seviyeAnahtari, olayKimligi, sonKritikOlay, tehditHesapla, pencereIcinde,
@@ -174,7 +174,7 @@ function App() {
   );
   // Gösterge ve harita detayı yalnızca haritadaki (konumu tanımlı) düğümler için.
   // Seçim yoksa: önce alarmdaki düğüm, yoksa ilk düğüm
-  const haritadakiler = dugumListesi.map((d) => d.id).filter((id) => DUGUM_KONUMLARI[id]);
+  const haritadakiler = dugumListesi.map((d) => d.id).filter(haritadaMi);
   const gosterilenDugum =
     (seciliDugum && haritadakiler.includes(seciliDugum) && seciliDugum) ||
     haritadakiler.find((id) => alarmdakiler.has(id)) ||

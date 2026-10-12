@@ -170,7 +170,7 @@ Düğüm listesi = `config.DUGUM_KONUMLARI` (hiç veri göndermemiş olsa da) +
 
 ```json
 [{
-  "id": "dugum3", "konum": "Yurtlar",
+  "id": "dugum3", "konum": "Lojmanlar",
   "cevrimici": false, "veri_yok": false,
   "son_veri_zamani": 1730000000, "son_durum": "offline",
   "son": { "duman": {"deger": 512, "zaman": 1730000000},
@@ -223,7 +223,7 @@ Kod: `backend/app/bildirim.py`, ayarlar: `backend/.env` (şablon: `backend/.env.
   denenmez; bekleme süresi denemeyle başladığı için her olayda yeniden denenmez.
 - **Hariç düğüm:** `test_dugum` (canlı test senaryoları) mail üretmez.
 - **Gönderim:** SMTP SSL (465), UTF-8, HTML + düz metin. Konu biçimi:
-  `[KRİTİK] Alev algılandı — dugum1 (Mühendislik Fakültesi)`.
+  `[KRİTİK] Alev algılandı — dugum1 (Ana Bina · A Kanadı)`.
   Düğüm konumları `config.DUGUM_KONUMLARI`'ndan gelir (frontend `sabitler.js` ile aynı tutulur).
 - **Gizlilik:** parola ve adresler yalnızca `backend/.env`'de durur (git'e girmez).
   Gmail için normal parola değil, 16 haneli **uygulama şifresi** kullanılır.

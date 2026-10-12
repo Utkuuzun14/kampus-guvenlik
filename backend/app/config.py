@@ -60,9 +60,10 @@ BILDIRIM_AKTIF = (os.getenv("BILDIRIM_AKTIF", "true").strip().lower() in ("1", "
 # Maildeki panel bağlantısı
 PANEL_URL = os.getenv("PANEL_URL", "http://localhost:5173")
 
-# Düğüm -> kampüs konumu (frontend/src/sabitler.js DUGUM_KONUMLARI ile aynı tutulmalı)
+# Düğüm -> kampüs konum adı. Tek kaynak burası (/api/dugumler); frontend/src/sabitler.js
+# yalnızca harita koordinatlarını tutar.
 DUGUM_KONUMLARI = {
-    "dugum1": "Mühendislik Fakültesi",
-    "dugum2": "Kütüphane",
-    "dugum3": "Yurtlar",
+    "dugum1": "Ana Bina · A Kanadı",
+    "dugum2": "Spor Kompleksi",
+    "dugum3": "Lojmanlar",
 }

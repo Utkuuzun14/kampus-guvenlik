@@ -14,8 +14,8 @@ tetiklenir:
   - Duman eşik aşımı düğüm başına ~10-15 dk'da bir, 2-3 ölçümlük kısa bir tepe.
   - Hareket seyrektir: her 3 sn'lik turda dugum2 %10, diğerleri %5 (izinsiz
     giriş demosu senaryo.py hareket ile)
-  - dugum2 (Kütüphane): en düşük duman seviyesi
-  - dugum3 (Yurtlar): 3-5 dk'da bir bağlantısı kopar (LWT tetiklenir),
+  - dugum2 (Spor Kompleksi): en düşük duman seviyesi
+  - dugum3 (Lojmanlar): 3-5 dk'da bir bağlantısı kopar (LWT tetiklenir),
     30-60 sn sonra geri bağlanıp "online" yayınlar
 
 Demo kontrolü: her düğüm kampus/demo/<dugum>/senaryo konusunu dinler

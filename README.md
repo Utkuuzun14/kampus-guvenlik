@@ -47,7 +47,7 @@ Komutlar proje kökünden, backend venv aktifken çalıştırılır.
    Mosquitto'ya bağlı. Üreteç varsayılan olarak sakindir: alev üretmez, duman eşiği
    düğüm başına ~10-15 dk'da bir kısa süre aşılır.
 3. **İzinsiz giriş:** `python scripts/senaryo.py hareket dugum2`
-   → Kütüphane'de ~25 sn art arda hareket (orta seviye olaylar, olay akışında görünür).
+   → Spor Kompleksi'nde ~25 sn art arda hareket (orta seviye olaylar, olay akışında görünür).
 4. **Yangın:** haritada dugum1'e tıkla (gösterge "MQ-2 · dugum1"), sonra
    `python scripts/senaryo.py yangin dugum1`
    → duman 30 sn'de kademeli yükselip eşiği (1800) aşar, ardından alev = kritik:
@@ -57,7 +57,7 @@ Komutlar proje kökünden, backend venv aktifken çalıştırılır.
    60 sn sonra duman düşer, alev "Yok" olur. Alarm bandındaki "Onayla" ile alarm
    onaylanır.
 5. **Bağlantı kopması (LWT):** `python scripts/senaryo.py kopma dugum3`
-   → Yurtlar düğümü DISCONNECT göndermeden düşer, broker LWT yayınlar: "Aktif düğüm
+   → Lojmanlar düğümü DISCONNECT göndermeden düşer, broker LWT yayınlar: "Aktif düğüm
    2/3", dugum3 çizgisi sönük gri. 30 sn sonra geri gelir ve 3/3 olur.
 6. **Testler (isteğe bağlı):** üreteci kapatıp `python scripts/test_senaryolari.py`
    (T1-T7, sonuçlar `docs/TEST_SONUCLARI.md`).

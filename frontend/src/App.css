@@ -875,15 +875,55 @@ a:focus-visible {
 
 /* ---------- Kampüs haritası ---------- */
 
-@keyframes akis { to { stroke-dashoffset: -28; } }
-@keyframes hub {
-  0%, 100% { r: 26; }
-  50% { r: 30; }
+/* Fotoğraf pikseli ölçeğinde (viewBox 1985 genişlik) akış ve Mosquitto halkası */
+@keyframes akis2 { to { stroke-dashoffset: -56; } }
+@keyframes hub2 {
+  0%, 100% { r: 46; }
+  50% { r: 54; }
 }
 
-.akis { animation: akis 1s linear infinite; }
-.akis-hizli { animation: akis 0.45s linear infinite; }
-.hub-halka { animation: hub 2.4s ease-in-out infinite; }
+.akis2 { animation: akis2 1s linear infinite; }
+.akis2-hizli { animation: akis2 0.45s linear infinite; }
+.hub2-halka { animation: hub2 2.4s ease-in-out infinite; }
+
+/* Harita görünüm seçicileri (açı / zemin): dar ekranda alt satıra sarar */
+.segmentler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.segment {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #0a1222;
+  border: 1px solid #1a2540;
+}
+
+.segment-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: #a9b6cf;
+}
+
+.segment-btn[aria-pressed="true"] {
+  background: #22d3ee;
+  color: #04202a;
+}
+
+.segment-btn:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
 
 .lejant {
   display: flex;
@@ -911,17 +951,28 @@ a:focus-visible {
   width: 100%;
 }
 
-/* Kroki + düğüm düğmeleri: oranını koruyarak küçülür */
+/* Hava fotoğrafı + SVG katmanı + düğüm düğmeleri: oranını koruyarak küçülür.
+   Fotoğraf yüklenmezse koyu zemin ve SVG katmanı görünmeye devam eder. */
 .harita-alan {
   position: relative;
   width: 100%;
-  aspect-ratio: 800 / 440;
+  aspect-ratio: 1985 / 1230;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--kenar-ince);
+  background: #070c18;
 }
 
-.harita-alan > svg { display: block; }
+.harita-foto,
+.harita-alan > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.harita-foto { object-fit: cover; }
 
 .harita-yazi { font-family: var(--font-genel); }
 

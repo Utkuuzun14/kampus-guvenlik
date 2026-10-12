@@ -33,6 +33,11 @@ button:focus-visible,a:focus-visible{outline:2px solid #22d3ee;outline-offset:2p
 .akan{position:absolute;top:-3px;width:8px;height:8px;border-radius:50%;background:#22d3ee;box-shadow:0 0 10px #22d3ee;animation:kay 1.8s linear infinite}
 @keyframes hub{0%,100%{r:26}50%{r:30}}
 .hub-halka{animation:hub 2.4s ease-in-out infinite}
+@keyframes akis2{to{stroke-dashoffset:-56}}
+.akis2{animation:akis2 1s linear infinite}
+.akis2-hizli{animation:akis2 .45s linear infinite}
+@keyframes hub2{0%,100%{r:46}50%{r:54}}
+.hub2-halka{animation:hub2 2.4s ease-in-out infinite}
 </style>
 </helmet>
 <div class="zemin" style="min-height: 100vh; color: #e6edf7; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; display: flex; flex-wrap: wrap;">
@@ -79,7 +84,7 @@ button:focus-visible,a:focus-visible{outline:2px solid #22d3ee;outline-offset:2p
 <div style="width: 44px; height: 44px; border-radius: 12px; background: #f43f5e; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a0508" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14 0-5.5 3-7 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg></div>
 <div style="display: flex; flex-direction: column; gap: 3px; flex: 1 1 280px; position: relative;">
 <div style="display: flex; align-items: center; gap: 10px;"><span class="yanip" style="font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: #fb7185;">● KRİTİK ALARM</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #fda4af;">00:18:42</span></div>
-<div style="font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 600; color: #ffe4e6;">Mühendislik Fakültesi'nde alev algılandı</div>
+<div style="font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 600; color: #ffe4e6;">Ana Bina A Kanadı'nda alev algılandı</div>
 <div style="font-size: 13px; color: #fecdd3;">dugum1 · Alev sensörü · Yetkililere e-posta bildirimi gönderildi</div>
 </div>
 <button type="button" onClick="{{dismiss}}" style="position: relative; min-height: 44px; padding: 0 20px; border-radius: 10px; border: none; background: #f43f5e; color: #1a0508; font-weight: 700; font-family: inherit; font-size: 14px; cursor: pointer;">Alarmı onayla</button>
@@ -135,46 +140,357 @@ button:focus-visible,a:focus-visible{outline:2px solid #22d3ee;outline-offset:2p
 <span style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600;">Kampüs haritası</span>
 <span style="font-size: 13px; color: #8b9bb8;">Düğüme tıklayarak ayrıntıları gör</span>
 </div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+<div role="group" aria-label="Harita açısı" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #0a1222; border: 1px solid #1a2540;">
+<sc-for list="{{acilar}}" as="g" hint-placeholder-count="2">
+<button type="button" onClick="{{g.pick}}" aria-pressed="{{g.pressed}}" style="{{g.stil}}">{{g.ad}}</button>
+</sc-for>
+</div>
+<div role="group" aria-label="Harita zemini" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #0a1222; border: 1px solid #1a2540;">
+<sc-for list="{{zeminler}}" as="g" hint-placeholder-count="2">
+<button type="button" onClick="{{g.pick}}" aria-pressed="{{g.pressed}}" style="{{g.stil}}">{{g.ad}}</button>
+</sc-for>
+</div>
+</div>
 <div style="display: flex; gap: 14px; font-size: 13px; color: #a9b6cf;">
 <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; background: #34d399; display: inline-block;"></span>Çevrimiçi</span>
 <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; background: #f43f5e; display: inline-block;"></span>Alarm</span>
 <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 9px; height: 9px; border-radius: 50%; background: #64748b; display: inline-block;"></span>Çevrimdışı</span>
 </div>
 </div>
-<div style="position: relative; width: 100%; aspect-ratio: 800 / 440; border-radius: 12px; overflow: hidden; border: 1px solid #16213a;">
-<svg role="img" aria-label="Kampüs krokisi: Mühendislik Fakültesi, Kütüphane, Rektörlük, Yurtlar, Yemekhane ve Merkezi Park" width="100%" height="100%" viewBox="0 0 800 440" style="display: block;">
-<rect x="0" y="0" width="800" height="440" fill="#08101f"></rect>
-<g stroke="#121c33" stroke-width="20" stroke-linecap="round">
-<line x1="0" y1="220" x2="800" y2="220"></line>
-<line x1="400" y1="0" x2="400" y2="440"></line>
-<line x1="400" y1="220" x2="800" y2="20"></line>
+<div style="position: relative; width: 100%; aspect-ratio: 1985 / 1230; border-radius: 12px; overflow: hidden; border: 1px solid #16213a; background: #070c18;">
+<sc-if value="{{gKroki}}" hint-placeholder-val="{{ true }}">
+<svg role="img" aria-label="Kampüs krokisi (hava fotoğrafından çizilmiş): ana bina A Kanadı, Rotunda ve B Kanadı, T şeklinde kapalı yol, üç halı saha, spor kompleksi, otopark, park, lojmanlar ve sanayi bölgesi" width="100%" height="100%" viewBox="15 0 1985 1230" style="position: absolute; inset: 0; display: block;">
+<rect x="15" y="0" width="1985" height="1230" fill="#060a14"></rect>
+<polygon points="745,60 2000,0 2000,1230 15,1230 15,794" fill="#0a111f"></polygon>
+<g fill="#0e1626" stroke="#18233b" stroke-width="2">
+<rect x="15" y="170" width="185" height="130" rx="3"></rect>
+<rect x="90" y="85" width="75" height="35" rx="2"></rect>
+<rect x="15" y="390" width="185" height="80" rx="2"></rect>
 </g>
-<g stroke="#1b2847" stroke-width="1.5" stroke-dasharray="8 8">
-<line x1="0" y1="220" x2="800" y2="220"></line>
-<line x1="400" y1="0" x2="400" y2="440"></line>
+<g fill="rgba(190,80,70,.35)">
+<rect x="15" y="230" width="230" height="22"></rect><rect x="15" y="262" width="200" height="22"></rect><rect x="15" y="300" width="160" height="22"></rect><rect x="15" y="335" width="120" height="22"></rect><rect x="15" y="362" width="80" height="20"></rect>
 </g>
-<rect x="430" y="250" width="190" height="160" rx="18" fill="rgba(52,211,153,.07)" stroke="rgba(52,211,153,.25)"></rect>
-<text x="448" y="276" fill="#4d8f76" font-size="13" font-family="IBM Plex Sans, sans-serif">Merkezi Park</text>
-<rect x="60" y="50" width="270" height="140" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
-<text x="78" y="76" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Mühendislik Fakültesi</text>
-<rect x="450" y="40" width="170" height="140" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
-<text x="468" y="66" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Kütüphane</text>
-<rect x="650" y="110" width="120" height="80" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
-<text x="664" y="136" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Rektörlük</text>
-<rect x="60" y="250" width="270" height="160" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
-<text x="78" y="276" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Yurtlar</text>
-<rect x="650" y="260" width="120" height="150" rx="12" fill="#0f1a31" stroke="#24345a"></rect>
-<text x="664" y="286" fill="#a9b6cf" font-size="14" font-weight="600" font-family="IBM Plex Sans, sans-serif">Yemekhane</text>
-<circle cx="195" cy="125" r="70" fill="rgba(244,63,94,.10)"></circle>
-<line x1="195" y1="330" x2="400" y2="220" stroke="#3b4660" stroke-width="2" stroke-dasharray="3 6"></line>
-<line class="akis" x1="535" y1="120" x2="400" y2="220" stroke="#22d3ee" stroke-width="2.5" stroke-dasharray="10 18" stroke-linecap="round"></line>
-<line class="akis-hizli" x1="195" y1="125" x2="400" y2="220" stroke="#f43f5e" stroke-width="3" stroke-dasharray="10 18" stroke-linecap="round"></line>
-<circle class="hub-halka" cx="400" cy="220" r="26" fill="none" stroke="rgba(34,211,238,.35)" stroke-width="2"></circle>
-<circle cx="400" cy="220" r="19" fill="#0b1730" stroke="#22d3ee" stroke-width="2"></circle>
-<path d="M392 214h16v5h-16zM392 222h16v5h-16z" fill="none" stroke="#22d3ee" stroke-width="1.6"></path>
-<rect x="356" y="250" width="88" height="22" rx="6" fill="rgba(6,11,22,.9)" stroke="#24345a"></rect>
-<text x="400" y="265" text-anchor="middle" fill="#a9b6cf" font-size="12" font-family="JetBrains Mono, monospace">Mosquitto</text>
+<g stroke="#16213a" stroke-linecap="round" fill="none">
+<line x1="15" y1="213" x2="2000" y2="210" stroke-width="22"></line>
+<line x1="15" y1="545" x2="415" y2="215" stroke-width="16"></line>
+<line x1="1690" y1="40" x2="2000" y2="205" stroke-width="18"></line>
+<line x1="1880" y1="222" x2="2000" y2="330" stroke-width="10"></line>
+<path d="M960 262 C1000 262 1010 250 1060 245" stroke-width="12"></path>
+<line x1="1040" y1="355" x2="1460" y2="352" stroke-width="10"></line>
+<line x1="1450" y1="400" x2="2000" y2="398" stroke-width="10"></line>
+<path d="M1300 225 L1560 640" stroke-width="10"></path>
+</g>
+<line x1="745" y1="60" x2="15" y2="794" stroke="rgba(34,211,238,.35)" stroke-width="4" stroke-dasharray="6 14"></line>
+<line x1="700" y1="112" x2="1050" y2="112" stroke="#1d2a44" stroke-width="3"></line>
+<polygon points="1085,225 1370,222 1445,345 1100,350" fill="#0f1829" stroke="#1c2945" stroke-width="2"></polygon>
+<line x1="1250" y1="230" x2="1275" y2="348" stroke="#10301f" stroke-width="22"></line>
+<g stroke="#1f2c4a" stroke-width="2">
+<line x1="1110" y1="232" x2="1110" y2="262"></line><line x1="1135" y1="232" x2="1135" y2="262"></line><line x1="1160" y1="232" x2="1160" y2="262"></line><line x1="1185" y1="232" x2="1185" y2="262"></line><line x1="1210" y1="232" x2="1210" y2="262"></line>
+<line x1="1300" y1="232" x2="1300" y2="262"></line><line x1="1325" y1="232" x2="1325" y2="262"></line><line x1="1350" y1="232" x2="1350" y2="262"></line>
+</g>
+<g fill="#2a3a5c"><rect x="1115" y="236" width="16" height="24" rx="3"></rect><rect x="1140" y="236" width="16" height="24" rx="3"></rect><rect x="1165" y="250" width="16" height="24" rx="3"></rect><rect x="1190" y="262" width="16" height="24" rx="3"></rect></g>
+<rect x="1400" y="222" width="600" height="172" fill="rgba(52,211,153,.05)"></rect>
+<g fill="none" stroke="rgba(52,211,153,.4)" stroke-width="4">
+<ellipse cx="1690" cy="285" rx="125" ry="42" stroke-dasharray="10 8"></ellipse>
+<path d="M1440 262 C1480 245 1530 250 1570 268"></path>
+<path d="M1690 300 A55 22 0 0 1 1800 300"></path><path d="M1705 300 A40 15 0 0 1 1785 300"></path>
+</g>
+<g fill="#16223a" stroke="#24345a" stroke-width="2">
+<rect x="960" y="5" width="70" height="95" rx="3"></rect>
+<rect x="1130" y="25" width="230" height="75" rx="3"></rect>
+<rect x="530" y="0" width="120" height="35" rx="3"></rect>
+<rect x="700" y="0" width="90" height="30" rx="3"></rect>
+<rect x="865" y="0" width="85" height="30" rx="3"></rect>
+<rect x="1760" y="170" width="50" height="25" rx="2"></rect>
+<rect x="1975" y="240" width="25" height="25" rx="2"></rect>
+<rect x="390" y="455" width="60" height="30" rx="2"></rect>
+</g>
+<g fill="rgba(190,80,70,.5)"><rect x="960" y="5" width="70" height="22"></rect><rect x="1130" y="25" width="230" height="10"></rect></g>
+<g><circle cx="1766" cy="460" r="37" fill="#10301f"></circle><circle cx="1720" cy="1155" r="30" fill="#0d2419"></circle><circle cx="1621" cy="458" r="28" fill="#10301f"></circle><circle cx="1370" cy="869" r="45" fill="#0b2016"></circle><circle cx="1750" cy="1187" r="38" fill="#10301f"></circle><circle cx="1703" cy="511" r="34" fill="#0b2016"></circle><circle cx="1409" cy="656" r="42" fill="#0d2419"></circle><circle cx="1399" cy="874" r="30" fill="#0d2419"></circle><circle cx="1697" cy="452" r="27" fill="#0d2419"></circle><circle cx="1663" cy="841" r="42" fill="#10301f"></circle><circle cx="1722" cy="776" r="32" fill="#0d2419"></circle><circle cx="1798" cy="603" r="37" fill="#0b2016"></circle><circle cx="1662" cy="685" r="35" fill="#0b2016"></circle><circle cx="1987" cy="498" r="34" fill="#10301f"></circle><circle cx="1432" cy="806" r="27" fill="#0b2016"></circle><circle cx="1382" cy="863" r="42" fill="#10301f"></circle><circle cx="1558" cy="691" r="36" fill="#10301f"></circle><circle cx="1511" cy="979" r="27" fill="#0b2016"></circle><circle cx="1800" cy="937" r="46" fill="#10301f"></circle><circle cx="1521" cy="720" r="39" fill="#0d2419"></circle><circle cx="1960" cy="695" r="38" fill="#10301f"></circle><circle cx="1369" cy="1038" r="29" fill="#0d2419"></circle><circle cx="1597" cy="1161" r="36" fill="#0d2419"></circle><circle cx="1631" cy="856" r="44" fill="#10301f"></circle><circle cx="1909" cy="631" r="34" fill="#10301f"></circle><circle cx="1787" cy="716" r="31" fill="#0d2419"></circle><circle cx="1486" cy="803" r="38" fill="#10301f"></circle><circle cx="1688" cy="906" r="32" fill="#0d2419"></circle><circle cx="1793" cy="828" r="38" fill="#0b2016"></circle><circle cx="1826" cy="779" r="43" fill="#0b2016"></circle><circle cx="1865" cy="726" r="34" fill="#0d2419"></circle><circle cx="1653" cy="732" r="30" fill="#0d2419"></circle><circle cx="1625" cy="491" r="38" fill="#0d2419"></circle><circle cx="1398" cy="702" r="27" fill="#0d2419"></circle><circle cx="1741" cy="523" r="31" fill="#10301f"></circle><circle cx="1734" cy="794" r="28" fill="#10301f"></circle><circle cx="1995" cy="787" r="36" fill="#0d2419"></circle><circle cx="1427" cy="1022" r="41" fill="#10301f"></circle><circle cx="1885" cy="534" r="26" fill="#0b2016"></circle><circle cx="1572" cy="973" r="44" fill="#0b2016"></circle><circle cx="1530" cy="934" r="28" fill="#10301f"></circle><circle cx="1677" cy="1154" r="33" fill="#0d2419"></circle><circle cx="1687" cy="1047" r="33" fill="#0d2419"></circle><circle cx="1741" cy="1054" r="41" fill="#0d2419"></circle><circle cx="1870" cy="1079" r="41" fill="#0d2419"></circle><circle cx="1464" cy="809" r="41" fill="#0d2419"></circle><circle cx="1859" cy="792" r="30" fill="#0b2016"></circle><circle cx="1971" cy="771" r="45" fill="#10301f"></circle><circle cx="1970" cy="703" r="30" fill="#0d2419"></circle><circle cx="1645" cy="680" r="36" fill="#0b2016"></circle><circle cx="1893" cy="798" r="39" fill="#0b2016"></circle><circle cx="1387" cy="948" r="44" fill="#0b2016"></circle><circle cx="1833" cy="797" r="30" fill="#0b2016"></circle><circle cx="1553" cy="1065" r="45" fill="#10301f"></circle><circle cx="1640" cy="1017" r="28" fill="#0d2419"></circle><circle cx="1431" cy="1151" r="42" fill="#0d2419"></circle><circle cx="1740" cy="895" r="35" fill="#10301f"></circle><circle cx="1434" cy="855" r="26" fill="#0b2016"></circle><circle cx="1765" cy="837" r="45" fill="#10301f"></circle><circle cx="1991" cy="562" r="43" fill="#0d2419"></circle><circle cx="1499" cy="643" r="31" fill="#0b2016"></circle><circle cx="1548" cy="852" r="43" fill="#0d2419"></circle><circle cx="1940" cy="694" r="35" fill="#0b2016"></circle><circle cx="1876" cy="829" r="43" fill="#0b2016"></circle><circle cx="1672" cy="1124" r="42" fill="#0b2016"></circle><circle cx="1445" cy="793" r="41" fill="#0b2016"></circle><circle cx="1371" cy="966" r="37" fill="#10301f"></circle><circle cx="1855" cy="488" r="37" fill="#0d2419"></circle><circle cx="1395" cy="775" r="27" fill="#0d2419"></circle><circle cx="1627" cy="908" r="36" fill="#0b2016"></circle><circle cx="1420" cy="320" r="22" fill="#10301f"></circle><circle cx="1470" cy="300" r="22" fill="#10301f"></circle><circle cx="1520" cy="330" r="22" fill="#10301f"></circle><circle cx="1600" cy="240" r="22" fill="#10301f"></circle><circle cx="1640" cy="330" r="22" fill="#10301f"></circle><circle cx="1690" cy="350" r="22" fill="#10301f"></circle><circle cx="1760" cy="330" r="22" fill="#10301f"></circle><circle cx="1840" cy="250" r="22" fill="#10301f"></circle><circle cx="1880" cy="310" r="22" fill="#10301f"></circle><circle cx="1930" cy="360" r="22" fill="#10301f"></circle><circle cx="1980" cy="300" r="22" fill="#10301f"></circle><circle cx="1500" cy="250" r="22" fill="#10301f"></circle><circle cx="600" cy="196" r="13" fill="#10301f"></circle><circle cx="648" cy="196" r="13" fill="#10301f"></circle><circle cx="696" cy="196" r="13" fill="#10301f"></circle><circle cx="744" cy="196" r="13" fill="#10301f"></circle><circle cx="792" cy="196" r="13" fill="#10301f"></circle><circle cx="840" cy="196" r="13" fill="#10301f"></circle><circle cx="888" cy="196" r="13" fill="#10301f"></circle><circle cx="936" cy="196" r="13" fill="#10301f"></circle><circle cx="984" cy="196" r="13" fill="#10301f"></circle><circle cx="1032" cy="196" r="13" fill="#10301f"></circle><circle cx="1080" cy="196" r="13" fill="#10301f"></circle><circle cx="1128" cy="196" r="13" fill="#10301f"></circle><circle cx="1176" cy="196" r="13" fill="#10301f"></circle><circle cx="1224" cy="196" r="13" fill="#10301f"></circle><circle cx="1272" cy="196" r="13" fill="#10301f"></circle><circle cx="1320" cy="196" r="13" fill="#10301f"></circle><circle cx="1368" cy="196" r="13" fill="#10301f"></circle><circle cx="1416" cy="196" r="13" fill="#10301f"></circle><circle cx="1464" cy="196" r="13" fill="#10301f"></circle><circle cx="1512" cy="196" r="13" fill="#10301f"></circle><circle cx="1560" cy="196" r="13" fill="#10301f"></circle><circle cx="1608" cy="196" r="13" fill="#10301f"></circle><circle cx="205" cy="198" r="12" fill="#10301f"></circle><circle cx="245" cy="198" r="12" fill="#10301f"></circle><circle cx="285" cy="198" r="12" fill="#10301f"></circle><circle cx="325" cy="198" r="12" fill="#10301f"></circle><circle cx="365" cy="198" r="12" fill="#10301f"></circle><circle cx="405" cy="198" r="12" fill="#10301f"></circle><circle cx="180" cy="705" r="20" fill="#0d2419"></circle><circle cx="230" cy="690" r="20" fill="#0d2419"></circle><circle cx="300" cy="705" r="20" fill="#0d2419"></circle><circle cx="330" cy="680" r="20" fill="#0d2419"></circle><circle cx="1040" cy="140" r="20" fill="#0d2419"></circle><circle cx="1180" cy="130" r="20" fill="#0d2419"></circle><circle cx="1250" cy="140" r="20" fill="#0d2419"></circle><circle cx="1330" cy="150" r="20" fill="#0d2419"></circle><circle cx="1400" cy="140" r="20" fill="#0d2419"></circle><circle cx="1480" cy="150" r="20" fill="#0d2419"></circle></g>
+<polygon points="770,450 1000,450 1000,560 770,560" fill="#101a2c"></polygon>
+<polygon points="820,490 985,490 985,550 820,550" fill="rgba(190,80,70,.28)"></polygon>
+<polygon points="790,930 980,930 990,1230 780,1230" fill="#0f1828"></polygon>
+<g fill="#0f3a2a" stroke="#2f7d5c" stroke-width="3">
+<polygon points="610,612 880,608 880,930 470,930 470,880"></polygon>
+<polygon points="985,595 1175,595 1210,860 982,860"></polygon>
+<polygon points="982,866 1212,866 1275,1230 980,1230"></polygon>
+</g>
+<g fill="none" stroke="rgba(230,237,247,.35)" stroke-width="2.5">
+<line x1="490" y1="765" x2="860" y2="765"></line><ellipse cx="710" cy="765" rx="28" ry="16"></ellipse><rect x="680" y="640" width="120" height="38"></rect><rect x="590" y="885" width="150" height="45"></rect>
+<line x1="995" y1="737" x2="1190" y2="737"></line><ellipse cx="1090" cy="737" rx="22" ry="12"></ellipse><rect x="1045" y="598" width="90" height="28"></rect><rect x="1045" y="820" width="110" height="38"></rect>
+<line x1="985" y1="1020" x2="1245" y2="1020"></line><ellipse cx="1108" cy="1020" rx="28" ry="17"></ellipse><rect x="1050" y="868" width="110" height="38"></rect><rect x="1050" y="1160" width="125" height="60"></rect>
+</g>
+<g fill="#0f3a2a" stroke="#2f6d55" stroke-width="2">
+<polygon points="1060,395 1500,395 1515,487 1060,487"></polygon>
+<polygon points="1235,495 1555,495 1580,628 1248,628"></polygon>
+</g>
+<g fill="#5a2230" stroke="rgba(230,237,247,.35)" stroke-width="2">
+<rect x="1100" y="418" width="75" height="54"></rect>
+<rect x="1205" y="405" width="125" height="76"></rect>
+<rect x="1365" y="405" width="132" height="76"></rect>
+</g>
+<g fill="none" stroke="rgba(230,237,247,.35)" stroke-width="2"><line x1="1100" y1="445" x2="1175" y2="445"></line><line x1="1267" y1="405" x2="1267" y2="481"></line><ellipse cx="1267" cy="443" rx="14" ry="9"></ellipse><line x1="1431" y1="405" x2="1431" y2="481"></line><ellipse cx="1431" cy="443" rx="14" ry="9"></ellipse></g>
+<polygon points="1328,405 1360,405 1372,470 1340,470" fill="rgba(251,146,60,.55)"></polygon>
+<g fill="#0f4466" stroke="rgba(230,237,247,.4)" stroke-width="2">
+<polygon points="1262,515 1378,515 1385,600 1265,600"></polygon>
+<polygon points="1405,515 1522,515 1532,600 1410,600"></polygon>
+</g>
+<g stroke="rgba(230,237,247,.45)" stroke-width="2"><line x1="1320" y1="515" x2="1325" y2="600"></line><line x1="1463" y1="515" x2="1471" y2="600"></line></g>
+<g fill="#1c2842" stroke="#30416a" stroke-width="2">
+<polygon points="515,560 1145,555 1145,608 515,612"></polygon>
+<polygon points="1025,478 1140,478 1140,555 1025,555"></polygon>
+<polygon points="850,610 980,610 965,900 855,900"></polygon>
+</g>
+<g stroke="#4a5f8c" stroke-width="3"><line x1="520" y1="584" x2="1140" y2="580"></line><line x1="915" y1="586" x2="910" y2="898"></line><line x1="1082" y1="482" x2="1082" y2="582"></line></g>
+<polygon points="782,450 848,450 848,480 782,480" fill="#1c2842" stroke="#30416a" stroke-width="2"></polygon>
+<g fill="#101a2e" stroke="#2c3f68" stroke-width="3">
+<polygon points="912,200 962,198 962,305 915,312"></polygon>
+<polygon points="550,322 942,322 945,455 800,480 790,515 780,545 685,550 670,480 575,455"></polygon>
+<path d="M645,246 L645,284 A133,38 0 0 0 910,284 L910,246 Z"></path>
+</g>
+<g stroke="#1c2a46" stroke-width="2">
+<line x1="580" y1="360" x2="940" y2="360"></line><line x1="582" y1="400" x2="942" y2="400"></line><line x1="600" y1="440" x2="940" y2="440"></line>
+<line x1="672" y1="440" x2="782" y2="440"></line><line x1="680" y1="500" x2="785" y2="500"></line>
+</g>
+<g fill="#1b2a47" stroke="#4a6aa0" stroke-width="3">
+<polygon points="660,190 670,177 730,161 800,151 855,150 920,165 957,185 960,200 660,212"></polygon>
+<ellipse cx="777" cy="246" rx="133" ry="38"></ellipse>
+<polygon points="550,315 567,302 685,289 790,286 937,300 942,322 550,330"></polygon>
+<polygon points="660,355 670,317 755,316 772,357 755,392 670,396"></polygon>
+</g>
+<g stroke="#2e4677" stroke-width="2">
+<line x1="777" y1="208" x2="777" y2="284"></line><line x1="644" y1="246" x2="910" y2="246"></line><line x1="683" y1="219" x2="871" y2="273"></line><line x1="871" y1="219" x2="683" y2="273"></line>
+<line x1="812" y1="160" x2="680" y2="205"></line><line x1="812" y1="160" x2="950" y2="195"></line><line x1="735" y1="300" x2="570" y2="318"></line><line x1="735" y1="300" x2="930" y2="315"></line>
+</g>
+<g fill="#2a3f66" stroke="#5b7fbf" stroke-width="2">
+<polygon points="762,240 770,232 784,232 792,240 792,252 784,260 770,260 762,252"></polygon>
+<polygon points="800,156 806,152 818,152 824,156 824,166 818,170 806,170 800,166"></polygon>
+<polygon points="722,295 728,291 742,291 748,295 748,305 742,309 728,309 722,305"></polygon>
+</g>
+<g font-family="IBM Plex Sans, sans-serif" font-weight="600" style="paint-order: stroke;" stroke="#050912" stroke-width="7" stroke-linejoin="round">
+<text x="540" y="395" text-anchor="end" fill="#e6edf7" font-size="28">A Kanadı</text>
+<text x="975" y="200" fill="#e6edf7" font-size="28">B Kanadı</text>
+<text x="1250" y="372" text-anchor="middle" fill="#fed7aa" font-size="26">Spor kompleksi</text>
+<text x="480" y="972" fill="#a7f3d0" font-size="26">Halı sahalar</text>
+<text x="1240" y="300" text-anchor="middle" fill="#c9d4e8" font-size="24">Otopark</text>
+<text x="1690" y="250" text-anchor="middle" fill="#a7f3d0" font-size="24">Park</text>
+<text x="1245" y="130" text-anchor="middle" fill="#e6edf7" font-size="26">Lojmanlar</text>
+<text x="40" y="150" fill="#8b9bb8" font-size="24">Sanayi bölgesi · kampüs dışı</text>
+<text x="1650" y="760" text-anchor="middle" fill="#6ee7b7" font-size="24">Ağaçlık alan</text>
+<text x="1010" y="640" fill="#94a3b8" font-size="20">Kapalı yol</text>
+</g>
+<circle cx="690" cy="400" r="120" fill="rgba(244,63,94,.18)"></circle>
+<line x1="1245" y1="62" x2="777" y2="246" stroke="#64748b" stroke-width="4" stroke-dasharray="6 12"></line>
+<line class="akis2" x1="1297" y1="430" x2="777" y2="246" stroke="#34d399" stroke-width="5" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<line class="akis2-hizli" x1="690" y1="400" x2="777" y2="246" stroke="#f43f5e" stroke-width="6" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<circle class="hub2-halka" cx="777" cy="246" r="46" fill="none" stroke="rgba(34,211,238,.45)" stroke-width="4"></circle>
+<circle cx="777" cy="246" r="32" fill="#0b1730" stroke="#22d3ee" stroke-width="4"></circle>
+<path d="M763 236h28v9h-28zM763 250h28v9h-28z" fill="none" stroke="#22d3ee" stroke-width="3"></path>
+<rect x="700" y="292" width="154" height="36" rx="10" fill="rgba(6,11,22,.92)" stroke="#24345a" stroke-width="2"></rect>
+<text x="777" y="317" text-anchor="middle" fill="#a9b6cf" font-size="21" font-family="JetBrains Mono, monospace">Mosquitto</text>
 </svg>
+</sc-if>
+<sc-if value="{{gKus}}" hint-placeholder-val="{{ false }}">
+<img src="/_blob/3e05d05039d36addf7a8f59f0faea650" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;">
+<svg role="img" aria-label="Kampüs hava görünümü: ana bina (A Kanadı, Rotunda, B Kanadı), kapalı yürüyüş yolu, halı sahalar, spor kompleksi, otopark, park ve lojmanlar" width="100%" height="100%" viewBox="15 0 1985 1230" style="position: absolute; inset: 0; display: block;">
+<line x1="598" y1="105" x2="15" y2="794" stroke="rgba(34,211,238,.35)" stroke-width="4" stroke-dasharray="6 14"></line>
+<g fill="rgba(52,211,153,.06)" stroke="rgba(52,211,153,.55)" stroke-width="3" stroke-dasharray="14 10">
+<polygon points="610,612 880,608 880,930 470,930 470,880"></polygon>
+<polygon points="985,595 1175,595 1275,1230 980,1230"></polygon>
+</g>
+<line x1="982" y1="860" x2="1215" y2="860" stroke="rgba(52,211,153,.45)" stroke-width="3" stroke-dasharray="14 10"></line>
+<g fill="rgba(244,114,94,.06)" stroke="rgba(251,146,60,.6)" stroke-width="3" stroke-dasharray="14 10">
+<polygon points="1030,388 1470,388 1470,485 1030,485"></polygon>
+<polygon points="1180,485 1535,485 1535,628 1180,628"></polygon>
+</g>
+<g fill="rgba(148,163,184,.06)" stroke="rgba(203,213,225,.4)" stroke-width="3">
+<polygon points="515,560 1145,555 1145,608 515,612"></polygon>
+<polygon points="1025,478 1140,478 1140,555 1025,555"></polygon>
+<polygon points="850,610 980,610 965,900 855,900"></polygon>
+</g>
+<g fill="rgba(34,211,238,.07)" stroke="rgba(34,211,238,.7)" stroke-width="3.5">
+<polygon points="660,190 670,177 730,161 800,151 855,150 920,165 957,185 962,305 915,312 915,215 660,215"></polygon>
+<polygon points="550,315 567,302 685,289 790,286 937,300 942,322 945,455 800,480 790,515 780,545 685,550 670,480 575,455"></polygon>
+</g>
+<ellipse cx="777" cy="246" rx="133" ry="38" fill="rgba(34,211,238,.08)" stroke="rgba(34,211,238,.8)" stroke-width="3.5"></ellipse>
+<g font-family="IBM Plex Sans, sans-serif" font-weight="600" style="paint-order: stroke;" stroke="#050912" stroke-width="7" stroke-linejoin="round">
+<text x="540" y="395" text-anchor="end" fill="#e6edf7" font-size="28">A Kanadı</text>
+<text x="975" y="200" fill="#e6edf7" font-size="28">B Kanadı</text>
+<text x="777" y="196" text-anchor="middle" fill="#a5f3fc" font-size="24">Rotunda</text>
+<text x="1250" y="372" text-anchor="middle" fill="#fed7aa" font-size="26">Spor kompleksi</text>
+<text x="480" y="972" fill="#a7f3d0" font-size="26">Halı sahalar</text>
+<text x="1240" y="300" text-anchor="middle" fill="#c9d4e8" font-size="24">Otopark</text>
+<text x="1700" y="350" text-anchor="middle" fill="#a7f3d0" font-size="24">Park</text>
+<text x="1245" y="130" text-anchor="middle" fill="#e6edf7" font-size="26">Lojmanlar</text>
+<text x="40" y="120" fill="#8b9bb8" font-size="24">Sanayi bölgesi · kampüs dışı</text>
+<text x="1650" y="760" text-anchor="middle" fill="#6ee7b7" font-size="24">Ağaçlık alan</text>
+</g>
+<circle cx="690" cy="400" r="120" fill="rgba(244,63,94,.16)"></circle>
+<line x1="1245" y1="62" x2="777" y2="246" stroke="#64748b" stroke-width="4" stroke-dasharray="6 12"></line>
+<line class="akis2" x1="1297" y1="430" x2="777" y2="246" stroke="#34d399" stroke-width="5" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<line class="akis2-hizli" x1="690" y1="400" x2="777" y2="246" stroke="#f43f5e" stroke-width="6" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<circle class="hub2-halka" cx="777" cy="246" r="46" fill="none" stroke="rgba(34,211,238,.45)" stroke-width="4"></circle>
+<circle cx="777" cy="246" r="32" fill="#0b1730" stroke="#22d3ee" stroke-width="4"></circle>
+<path d="M763 236h28v9h-28zM763 250h28v9h-28z" fill="none" stroke="#22d3ee" stroke-width="3"></path>
+<rect x="700" y="292" width="154" height="36" rx="10" fill="rgba(6,11,22,.92)" stroke="#24345a" stroke-width="2"></rect>
+<text x="777" y="317" text-anchor="middle" fill="#a9b6cf" font-size="21" font-family="JetBrains Mono, monospace">Mosquitto</text>
+</svg>
+</sc-if>
+<sc-if value="{{gPersp}}" hint-placeholder-val="{{ false }}">
+<img src="/_blob/4fe273504a732b2664300a747b2658c2" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;">
+<svg role="img" aria-label="Kampüs perspektif görünümü: A Kanadı, Rotunda ve B Kanadı cepheleri, ana giriş, spor kompleksi, halı sahalar, kapalı yürüyüş yolu ve otopark" width="100%" height="100%" viewBox="0 60 2000 1239" style="position: absolute; inset: 0; display: block;">
+<g fill="rgba(52,211,153,.06)" stroke="rgba(52,211,153,.55)" stroke-width="3" stroke-dasharray="14 10">
+<polygon points="40,425 165,385 500,522 400,562 90,467"></polygon>
+<polygon points="367,397 497,354 705,406 590,465"></polygon>
+</g>
+<g fill="rgba(244,114,94,.06)" stroke="rgba(251,146,60,.6)" stroke-width="3" stroke-dasharray="14 10">
+<polygon points="85,715 295,610 590,660 460,790 315,850"></polygon>
+<polygon points="322,868 600,700 705,615 970,670 905,775 600,1020"></polygon>
+</g>
+<g stroke="rgba(203,213,225,.32)" stroke-width="26" stroke-linecap="round">
+<line x1="795" y1="395" x2="598" y2="488"></line>
+<line x1="280" y1="402" x2="598" y2="488"></line>
+</g>
+<polygon points="425,547 505,525 737,578 665,622" fill="rgba(148,163,184,.08)" stroke="rgba(203,213,225,.45)" stroke-width="3"></polygon>
+<g fill="rgba(34,211,238,.07)" stroke="rgba(34,211,238,.7)" stroke-width="3.5">
+<polygon points="780,320 860,300 1030,300 1160,315 1162,350 1115,380 1110,500 1010,500 1000,595 910,595 895,545 865,480 795,465 785,400"></polygon>
+<polygon points="1600,405 1745,410 1800,460 2000,500 2000,750 1940,770 1750,720 1650,730 1560,770 1465,740 1470,580 1490,550 1590,490 1590,430"></polygon>
+<path d="M1112,405 L1112,595 A180,48 0 0 0 1472,595 L1472,405"></path>
+</g>
+<ellipse cx="1292" cy="405" rx="180" ry="52" fill="rgba(34,211,238,.1)" stroke="rgba(34,211,238,.85)" stroke-width="3.5"></ellipse>
+<polygon points="1135,600 1260,600 1480,600 1480,700 1440,730 1260,720 1135,640" fill="rgba(203,213,225,.06)" stroke="rgba(203,213,225,.45)" stroke-width="3" stroke-dasharray="10 8"></polygon>
+<g font-family="IBM Plex Sans, sans-serif" font-weight="600" style="paint-order: stroke;" stroke="#050912" stroke-width="7" stroke-linejoin="round">
+<text x="900" y="285" text-anchor="middle" fill="#e6edf7" font-size="28">A Kanadı</text>
+<text x="1292" y="338" text-anchor="middle" fill="#a5f3fc" font-size="26">Rotunda</text>
+<text x="1760" y="390" text-anchor="middle" fill="#e6edf7" font-size="28">B Kanadı</text>
+<text x="1310" y="768" text-anchor="middle" fill="#c9d4e8" font-size="24">Ana giriş</text>
+<text x="640" y="1068" text-anchor="middle" fill="#fed7aa" font-size="26">Spor kompleksi</text>
+<text x="250" y="365" text-anchor="middle" fill="#a7f3d0" font-size="26">Halı sahalar</text>
+<text x="660" y="660" text-anchor="middle" fill="#c9d4e8" font-size="22">Kapalı yol</text>
+<text x="1380" y="1010" text-anchor="middle" fill="#c9d4e8" font-size="26">Otopark</text>
+<text x="1100" y="130" text-anchor="middle" fill="#8b9bb8" font-size="24">Sanayi bölgesi · kampüs dışı</text>
+<text x="1975" y="950" text-anchor="end" fill="#e6edf7" font-size="22">Lojmanlar → kadraj dışı</text>
+</g>
+<circle cx="850" cy="450" r="125" fill="rgba(244,63,94,.16)"></circle>
+<line x1="1940" y1="880" x2="1292" y2="405" stroke="#64748b" stroke-width="4" stroke-dasharray="6 12"></line>
+<line class="akis2" x1="630" y1="825" x2="1292" y2="405" stroke="#34d399" stroke-width="5" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<line class="akis2-hizli" x1="850" y1="450" x2="1292" y2="405" stroke="#f43f5e" stroke-width="6" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<circle class="hub2-halka" cx="1292" cy="405" r="46" fill="none" stroke="rgba(34,211,238,.45)" stroke-width="4"></circle>
+<circle cx="1292" cy="405" r="32" fill="#0b1730" stroke="#22d3ee" stroke-width="4"></circle>
+<path d="M1278 395h28v9h-28zM1278 409h28v9h-28z" fill="none" stroke="#22d3ee" stroke-width="3"></path>
+<rect x="1215" y="452" width="154" height="36" rx="10" fill="rgba(6,11,22,.92)" stroke="#24345a" stroke-width="2"></rect>
+<text x="1292" y="477" text-anchor="middle" fill="#a9b6cf" font-size="21" font-family="JetBrains Mono, monospace">Mosquitto</text>
+</svg>
+</sc-if>
+<sc-if value="{{gPerspKroki}}" hint-placeholder-val="{{ false }}">
+<svg role="img" aria-label="Kampüs perspektif krokisi: A Kanadı, Rotunda ve B Kanadı cepheleriyle, ana giriş, spor kompleksi, halı sahalar, kapalı yol ve otopark" width="100%" height="100%" viewBox="0 60 2000 1239" style="position: absolute; inset: 0; display: block;">
+<rect x="0" y="60" width="2000" height="1239" fill="#060a14"></rect>
+<polygon points="0,135 780,255 2000,415 2000,1299 0,1299" fill="#0a111f"></polygon>
+<g fill="#0e1626" stroke="#18233b" stroke-width="2">
+<polygon points="960,105 1250,95 2000,110 2000,290 1400,250 1150,225 960,165"></polygon>
+<rect x="590" y="60" width="130" height="80" rx="3"></rect>
+<rect x="570" y="100" width="130" height="50" rx="3"></rect>
+<rect x="820" y="105" width="120" height="45" rx="3"></rect>
+<ellipse cx="520" cy="120" rx="40" ry="16"></ellipse>
+</g>
+<g stroke="#131c30" stroke-width="2"><line x1="1000" y1="140" x2="2000" y2="160"></line><line x1="1080" y1="185" x2="2000" y2="215"></line><line x1="1200" y1="215" x2="2000" y2="255"></line></g>
+<g fill="rgba(190,80,70,.4)"><rect x="1520" y="262" width="80" height="33"></rect><rect x="1795" y="305" width="195" height="62"></rect></g>
+<polygon points="900,225 1400,250 1380,300 900,270" fill="#0f1829"></polygon>
+<line x1="0" y1="135" x2="2000" y2="415" stroke="rgba(34,211,238,.35)" stroke-width="4" stroke-dasharray="6 14"></line>
+<g stroke="#16213a" stroke-linecap="round" fill="none">
+<path d="M1000 700 C 900 760 760 900 600 1040" stroke-width="30"></path>
+<line x1="275" y1="1299" x2="640" y2="1040" stroke-width="40"></line>
+<line x1="600" y1="1040" x2="250" y2="830" stroke-width="18"></line>
+<path d="M1000 700 C 1100 690 1180 700 1250 740" stroke-width="22"></path>
+</g>
+<polygon points="900,1010 1180,830 1880,880 2000,900 2000,1299 1150,1299" fill="#0f1829" stroke="#1c2945" stroke-width="2"></polygon>
+<line x1="1060" y1="925" x2="1830" y2="1255" stroke="rgba(16,48,31,.9)" stroke-width="36"></line>
+<polygon points="1175,775 1875,815 1875,880 1180,835" fill="rgba(52,211,153,.07)"></polygon>
+<g fill="#2a3a5c"><rect x="1685" y="985" width="20" height="32" rx="4"></rect><rect x="1728" y="1010" width="20" height="32" rx="4"></rect><rect x="1866" y="1047" width="20" height="32" rx="4"></rect><rect x="1903" y="1060" width="20" height="32" rx="4"></rect><rect x="1941" y="1072" width="20" height="32" rx="4"></rect><rect x="1672" y="1104" width="20" height="32" rx="4"></rect><rect x="1735" y="1129" width="20" height="32" rx="4"></rect></g>
+<g><circle cx="68" cy="543" r="47" fill="#10301f"></circle><circle cx="68" cy="608" r="33" fill="#0b2016"></circle><circle cx="71" cy="555" r="33" fill="#10301f"></circle><circle cx="46" cy="440" r="45" fill="#0b2016"></circle><circle cx="95" cy="551" r="37" fill="#10301f"></circle><circle cx="98" cy="555" r="33" fill="#0d2419"></circle><circle cx="125" cy="434" r="31" fill="#0d2419"></circle><circle cx="90" cy="591" r="36" fill="#0b2016"></circle><circle cx="126" cy="534" r="42" fill="#10301f"></circle><circle cx="1" cy="439" r="42" fill="#10301f"></circle><circle cx="379" cy="1298" r="52" fill="#0b2016"></circle><circle cx="97" cy="1194" r="45" fill="#0d2419"></circle><circle cx="27" cy="1197" r="42" fill="#10301f"></circle><circle cx="147" cy="1282" r="52" fill="#0d2419"></circle><circle cx="81" cy="1268" r="35" fill="#10301f"></circle><circle cx="373" cy="1035" r="36" fill="#0b2016"></circle><circle cx="75" cy="1157" r="41" fill="#10301f"></circle><circle cx="126" cy="1284" r="50" fill="#0d2419"></circle><circle cx="51" cy="1171" r="34" fill="#10301f"></circle><circle cx="303" cy="938" r="46" fill="#10301f"></circle><circle cx="193" cy="1294" r="50" fill="#10301f"></circle><circle cx="245" cy="911" r="43" fill="#0d2419"></circle><circle cx="0" cy="1240" r="54" fill="#0b2016"></circle><circle cx="116" cy="1249" r="38" fill="#10301f"></circle><circle cx="378" cy="1125" r="46" fill="#0d2419"></circle><circle cx="376" cy="954" r="39" fill="#0b2016"></circle><circle cx="125" cy="990" r="36" fill="#0d2419"></circle><circle cx="79" cy="1140" r="34" fill="#10301f"></circle><circle cx="141" cy="1059" r="54" fill="#10301f"></circle><circle cx="316" cy="920" r="42" fill="#0b2016"></circle><circle cx="59" cy="1260" r="51" fill="#0d2419"></circle><circle cx="276" cy="930" r="47" fill="#0b2016"></circle><circle cx="415" cy="1293" r="43" fill="#0b2016"></circle><circle cx="394" cy="1157" r="32" fill="#0b2016"></circle><circle cx="553" cy="1186" r="41" fill="#10301f"></circle><circle cx="456" cy="1286" r="37" fill="#0b2016"></circle><circle cx="412" cy="1258" r="31" fill="#0d2419"></circle><circle cx="466" cy="1248" r="39" fill="#0d2419"></circle><circle cx="785" cy="970" r="16" fill="#10301f"></circle><circle cx="830" cy="935" r="16" fill="#10301f"></circle><circle cx="870" cy="905" r="16" fill="#10301f"></circle><circle cx="920" cy="870" r="16" fill="#10301f"></circle><circle cx="1010" cy="815" r="16" fill="#10301f"></circle><circle cx="700" cy="1030" r="16" fill="#10301f"></circle><circle cx="1205" cy="780" r="16" fill="#10301f"></circle><circle cx="1300" cy="790" r="16" fill="#10301f"></circle><circle cx="1380" cy="800" r="16" fill="#10301f"></circle><circle cx="1460" cy="810" r="16" fill="#10301f"></circle><circle cx="1560" cy="830" r="16" fill="#10301f"></circle><circle cx="1650" cy="850" r="16" fill="#10301f"></circle><circle cx="1760" cy="850" r="16" fill="#10301f"></circle><circle cx="1240" cy="970" r="16" fill="#10301f"></circle><circle cx="1320" cy="990" r="16" fill="#10301f"></circle><circle cx="1400" cy="1010" r="16" fill="#10301f"></circle><circle cx="1480" cy="1030" r="16" fill="#10301f"></circle><circle cx="1560" cy="1045" r="16" fill="#10301f"></circle><circle cx="1640" cy="1060" r="16" fill="#10301f"></circle><circle cx="205" cy="195" r="18" fill="#0d2419"></circle><circle cx="250" cy="200" r="18" fill="#0d2419"></circle><circle cx="320" cy="205" r="18" fill="#0d2419"></circle><circle cx="400" cy="210" r="18" fill="#0d2419"></circle><circle cx="470" cy="220" r="18" fill="#0d2419"></circle><circle cx="840" cy="280" r="18" fill="#0d2419"></circle><circle cx="900" cy="275" r="18" fill="#0d2419"></circle><circle cx="1450" cy="330" r="18" fill="#0d2419"></circle><circle cx="1560" cy="320" r="18" fill="#0d2419"></circle><circle cx="1640" cy="330" r="18" fill="#0d2419"></circle><circle cx="1700" cy="330" r="18" fill="#0d2419"></circle><circle cx="1820" cy="330" r="18" fill="#0d2419"></circle></g>
+<polygon points="620,500 890,470 980,500 1000,600 700,610" fill="#101a2c"></polygon>
+<polygon points="640,555 860,505 885,525 700,578" fill="rgba(190,80,70,.3)"></polygon>
+<g fill="#0f3a2a" stroke="#2f7d5c" stroke-width="3">
+<polygon points="40,425 165,385 500,522 400,562 90,467"></polygon>
+<polygon points="367,397 497,354 705,406 590,465"></polygon>
+</g>
+<g fill="none" stroke="rgba(230,237,247,.35)" stroke-width="2.5">
+<ellipse cx="160" cy="445" rx="22" ry="9"></ellipse><ellipse cx="350" cy="510" rx="22" ry="9"></ellipse><ellipse cx="537" cy="414" rx="20" ry="8"></ellipse>
+<line x1="250" y1="440" x2="215" y2="500"></line><line x1="590" y1="380" x2="485" y2="445"></line>
+</g>
+<g fill="#0f3a2a" stroke="#2f6d55" stroke-width="2">
+<polygon points="85,715 295,610 590,660 460,790 315,850"></polygon>
+<polygon points="322,868 600,700 705,615 970,670 905,775 600,1020"></polygon>
+</g>
+<g fill="#0f4466" stroke="rgba(230,237,247,.4)" stroke-width="2">
+<polygon points="160,733 255,695 410,760 330,815"></polygon>
+<polygon points="310,662 390,625 548,677 470,722"></polygon>
+</g>
+<g stroke="rgba(230,237,247,.45)" stroke-width="2"><line x1="207" y1="714" x2="370" y2="788"></line><line x1="350" y1="644" x2="509" y2="700"></line></g>
+<g fill="#5a2230" stroke="rgba(230,237,247,.35)" stroke-width="2">
+<polygon points="365,890 490,802 720,898 610,995"></polygon>
+<polygon points="560,760 660,695 880,775 790,850"></polygon>
+<polygon points="725,670 790,642 905,690 850,720"></polygon>
+</g>
+<g fill="none" stroke="rgba(230,237,247,.35)" stroke-width="2"><line x1="428" y1="846" x2="665" y2="947"></line><ellipse cx="540" cy="898" rx="18" ry="10"></ellipse><line x1="610" y1="728" x2="835" y2="813"></line><ellipse cx="720" cy="772" rx="16" ry="9"></ellipse></g>
+<polygon points="530,790 560,775 740,850 715,870" fill="rgba(251,146,60,.6)"></polygon>
+<g fill="#1c2842" stroke="#30416a" stroke-width="2">
+<polygon points="790,380 805,405 605,500 588,478"></polygon>
+<polygon points="283,388 602,474 594,502 277,416"></polygon>
+<polygon points="425,547 505,525 737,578 665,622"></polygon>
+</g>
+<g stroke="#4a5f8c" stroke-width="3"><line x1="797" y1="392" x2="597" y2="489"></line><line x1="280" y1="402" x2="598" y2="488"></line><line x1="465" y1="536" x2="701" y2="600"></line></g>
+<polygon points="970,500 1110,500 1135,600 1000,600" fill="rgba(190,80,70,.35)" stroke="#5a2a30" stroke-width="2"></polygon>
+<g fill="#101a2e" stroke="#2c3f68" stroke-width="3">
+<polygon points="780,320 860,300 1030,300 1160,315 1162,350 1115,380 1110,500 1010,500 1000,595 910,595 895,545 865,480 795,465 785,400"></polygon>
+<polygon points="1600,405 1745,410 1800,460 2000,500 2000,750 1940,770 1750,720 1650,730 1560,770 1465,740 1470,580 1490,550 1590,490 1590,430"></polygon>
+<path d="M1112,405 L1112,595 A180,48 0 0 0 1472,595 L1472,405 Z"></path>
+<polygon points="1135,600 1260,600 1480,600 1480,700 1440,730 1260,720 1135,640"></polygon>
+</g>
+<g fill="none" stroke="#1f3050" stroke-width="2">
+<line x1="790" y1="390" x2="890" y2="395"></line><line x1="795" y1="430" x2="890" y2="440"></line><line x1="905" y1="450" x2="1000" y2="450"></line><line x1="905" y1="500" x2="1000" y2="500"></line><line x1="905" y1="550" x2="998" y2="550"></line><line x1="1012" y1="400" x2="1110" y2="400"></line><line x1="1012" y1="450" x2="1110" y2="450"></line>
+<path d="M1112,455 A180,48 0 0 0 1472,455"></path><path d="M1112,505 A180,48 0 0 0 1472,505"></path><path d="M1112,550 A180,48 0 0 0 1472,550"></path>
+<line x1="1470" y1="620" x2="2000" y2="590"></line><line x1="1468" y1="670" x2="2000" y2="645"></line><line x1="1466" y1="715" x2="2000" y2="700"></line>
+<line x1="1140" y1="660" x2="1480" y2="650"></line>
+</g>
+<g fill="#1b2a47" stroke="#4a6aa0" stroke-width="3">
+<polygon points="780,320 860,300 1030,300 1160,315 1160,345 1030,352 1012,345 895,345 785,348"></polygon>
+<polygon points="893,348 915,335 990,335 1012,348 995,412 905,412"></polygon>
+<polygon points="1490,548 1590,490 1600,410 1745,410 1800,460 2000,500 2000,560 1800,525 1700,510 1600,530 1500,570"></polygon>
+<ellipse cx="1292" cy="405" rx="180" ry="52"></ellipse>
+</g>
+<g stroke="#2e4677" stroke-width="2">
+<line x1="1292" y1="353" x2="1292" y2="457"></line><line x1="1112" y1="405" x2="1472" y2="405"></line><line x1="1165" y1="368" x2="1419" y2="442"></line><line x1="1419" y1="368" x2="1165" y2="442"></line>
+<line x1="945" y1="312" x2="790" y2="330"></line><line x1="945" y1="312" x2="1150" y2="330"></line><line x1="1690" y1="440" x2="1600" y2="420"></line><line x1="1690" y1="440" x2="1950" y2="510"></line>
+</g>
+<g fill="#2a3f66" stroke="#5b7fbf" stroke-width="2">
+<polygon points="1272,398 1280,390 1304,390 1312,398 1312,412 1304,420 1280,420 1272,412"></polygon>
+<polygon points="930,308 938,302 954,302 962,308 962,318 954,324 938,324 930,318"></polygon>
+<polygon points="1672,433 1680,426 1700,426 1708,433 1708,445 1700,452 1680,452 1672,445"></polygon>
+</g>
+<g font-family="IBM Plex Sans, sans-serif" font-weight="600" style="paint-order: stroke;" stroke="#050912" stroke-width="7" stroke-linejoin="round">
+<text x="900" y="285" text-anchor="middle" fill="#e6edf7" font-size="28">A Kanadı</text>
+<text x="1760" y="390" text-anchor="middle" fill="#e6edf7" font-size="28">B Kanadı</text>
+<text x="1310" y="768" text-anchor="middle" fill="#c9d4e8" font-size="24">Ana giriş</text>
+<text x="640" y="1068" text-anchor="middle" fill="#fed7aa" font-size="26">Spor kompleksi</text>
+<text x="250" y="365" text-anchor="middle" fill="#a7f3d0" font-size="26">Halı sahalar</text>
+<text x="660" y="660" text-anchor="middle" fill="#c9d4e8" font-size="22">Kapalı yol</text>
+<text x="1380" y="1010" text-anchor="middle" fill="#c9d4e8" font-size="26">Otopark</text>
+<text x="1100" y="130" text-anchor="middle" fill="#8b9bb8" font-size="24">Sanayi bölgesi · kampüs dışı</text>
+<text x="1975" y="950" text-anchor="end" fill="#e6edf7" font-size="22">Lojmanlar → kadraj dışı</text>
+</g>
+<circle cx="850" cy="450" r="125" fill="rgba(244,63,94,.18)"></circle>
+<line x1="1940" y1="880" x2="1292" y2="405" stroke="#64748b" stroke-width="4" stroke-dasharray="6 12"></line>
+<line class="akis2" x1="630" y1="825" x2="1292" y2="405" stroke="#34d399" stroke-width="5" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<line class="akis2-hizli" x1="850" y1="450" x2="1292" y2="405" stroke="#f43f5e" stroke-width="6" stroke-dasharray="20 36" stroke-linecap="round"></line>
+<circle class="hub2-halka" cx="1292" cy="405" r="46" fill="none" stroke="rgba(34,211,238,.45)" stroke-width="4"></circle>
+<circle cx="1292" cy="405" r="32" fill="#0b1730" stroke="#22d3ee" stroke-width="4"></circle>
+<path d="M1278 395h28v9h-28zM1278 409h28v9h-28z" fill="none" stroke="#22d3ee" stroke-width="3"></path>
+<rect x="1215" y="452" width="154" height="36" rx="10" fill="rgba(6,11,22,.92)" stroke="#24345a" stroke-width="2"></rect>
+<text x="1292" y="477" text-anchor="middle" fill="#a9b6cf" font-size="21" font-family="JetBrains Mono, monospace">Mosquitto</text>
+</svg>
+</sc-if>
 <sc-for list="{{nodes}}" as="n" hint-placeholder-count="3">
 <button type="button" onClick="{{n.pick}}" aria-label="{{n.aria}}" aria-pressed="{{n.pressed}}" style="{{n.konumStil}}">
 <span class="{{n.cls}}" style="{{n.noktaStil}}"></span>
@@ -375,12 +691,29 @@ class Component extends DCLogic {
     });
 
     var dugumler = [
-      { id: 'dugum1', konum: 'Mühendislik Fakültesi', x: 24.4, y: 28.4, durum: 'Alarm', tip: 'alarm', pir: 'Pasif', mq2: '1480', alev: 'VAR', sonVeri: '3 sn önce' },
-      { id: 'dugum2', konum: 'Kütüphane', x: 66.9, y: 27.3, durum: 'Çevrimiçi', tip: 'ok', pir: 'Aktif', mq2: '640', alev: 'Yok', sonVeri: '1 sn önce' },
-      { id: 'dugum3', konum: 'Yurtlar', x: 24.4, y: 75, durum: 'Çevrimdışı', tip: 'off', pir: '—', mq2: '—', alev: '—', sonVeri: '14 dk önce' }
+      { id: 'dugum1', konum: 'Ana Bina · A Kanadı', x: 34.0, y: 32.5, x2: 42.5, y2: 31.5, durum: 'Alarm', tip: 'alarm', pir: 'Pasif', mq2: '1480', alev: 'VAR', sonVeri: '3 sn önce' },
+      { id: 'dugum2', konum: 'Spor Kompleksi', x: 64.6, y: 35.0, x2: 31.5, y2: 61.7, durum: 'Çevrimiçi', tip: 'ok', pir: 'Aktif', mq2: '640', alev: 'Yok', sonVeri: '1 sn önce' },
+      { id: 'dugum3', konum: 'Lojmanlar', x: 62.0, y: 5.0, x2: 96.5, y2: 66.2, durum: 'Çevrimdışı', tip: 'off', pir: '—', mq2: '—', alev: '—', sonVeri: '14 dk önce' }
     ];
     var tipRenk = { alarm: '#f43f5e', ok: '#34d399', off: '#64748b' };
     var secili = this.state.secili;
+    var aci = this.state.aci || 'kus';
+    var zemin = this.state.zemin || 'kroki';
+    var persp = aci === 'persp';
+    function segment(liste, secim, anahtar) {
+      return liste.map(function (p) {
+        var aktif = secim === p[0];
+        return {
+          ad: p[1],
+          pressed: aktif ? 'true' : 'false',
+          pick: function () { var o = {}; o[anahtar] = p[0]; self.setState(o); },
+          stil: 'min-height:36px;padding:0 14px;border-radius:9px;border:none;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;' +
+            (aktif ? 'background:#22d3ee;color:#04202a;' : 'background:transparent;color:#a9b6cf;')
+        };
+      });
+    }
+    var acilar = segment([['kus', 'Kuşbakışı'], ['persp', 'Perspektif']], aci, 'aci');
+    var zeminler = segment([['kroki', 'Kroki'], ['foto', 'Fotoğraf']], zemin, 'zemin');
     var nodes = dugumler.map(function (n) {
       var c = tipRenk[n.tip];
       var aktif = n.id === secili;
@@ -390,7 +723,7 @@ class Component extends DCLogic {
         pressed: aktif ? 'true' : 'false',
         pick: function () { self.setState({ secili: n.id }); },
         cls: n.tip === 'alarm' ? 'n-kirmizi' : (n.tip === 'ok' ? 'n-yesil' : 'n-gri'),
-        konumStil: 'position:absolute;left:' + n.x + '%;top:' + n.y + '%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:none;padding:6px;cursor:pointer;min-width:44px;min-height:44px;',
+        konumStil: 'position:absolute;left:' + (persp ? n.x2 : n.x) + '%;top:' + (persp ? n.y2 : n.y) + '%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:none;padding:6px;cursor:pointer;min-width:44px;min-height:44px;',
         noktaStil: 'width:' + (aktif ? 20 : 16) + 'px;height:' + (aktif ? 20 : 16) + 'px;border-radius:50%;background:' + c + ';border:3px solid #050912;outline:' + (aktif ? '2px solid ' + c : 'none') + ';display:block;',
         etiketStil: "font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;color:#e6edf7;background:rgba(6,11,22,.9);border:1px solid " + (aktif ? c : '#24345a') + ';'
       };
@@ -403,11 +736,11 @@ class Component extends DCLogic {
     });
 
     var akisVeri = [
-      { baslik: 'Alev algılandı', detay: 'dugum1 · Mühendislik', zaman: '00:18:42', s: 'kritik' },
+      { baslik: 'Alev algılandı', detay: 'dugum1 · A Kanadı', zaman: '00:18:42', s: 'kritik' },
       { baslik: 'Duman eşiği aşıldı', detay: 'dugum1 · 2140', zaman: '00:18:37', s: 'yuksek' },
-      { baslik: 'Hareket algılandı', detay: 'dugum2 · Kütüphane', zaman: '00:17:55', s: 'orta' },
+      { baslik: 'Hareket algılandı', detay: 'dugum2 · Spor Kompleksi', zaman: '00:17:55', s: 'orta' },
       { baslik: 'Düğüm çevrimdışı', detay: 'dugum3 · LWT mesajı', zaman: '00:05:10', s: 'uyari' },
-      { baslik: 'Düğüm çevrimiçi', detay: 'dugum2 · Kütüphane', zaman: '00:01:02', s: 'bilgi' }
+      { baslik: 'Düğüm çevrimiçi', detay: 'dugum2 · Spor Kompleksi', zaman: '00:01:02', s: 'bilgi' }
     ];
     var akis = akisVeri.map(function (a, i) {
       var c = renk[a.s];
@@ -468,6 +801,9 @@ class Component extends DCLogic {
 
     return {
       saat: saat, tarih: tarih, tehdit: tehdit, hat: hat,
+      acilar: acilar, zeminler: zeminler,
+      gKroki: !persp && zemin === 'kroki', gKus: !persp && zemin === 'foto',
+      gPerspKroki: persp && zemin === 'kroki', gPersp: persp && zemin === 'foto',
       kpis: kpis, nodes: nodes, sel: sel, akis: akis, isi: isi, dagilim: dagilim,
       rows: rows, filters: filters, countLabel: rows.length + ' kayıt',
       showAlarm: this.state.alarm,

@@ -46,12 +46,24 @@ export const SENSOR_KISA = {
   durum: "Sistem",
 };
 
-// Düğüm → harita üzerindeki yüzde konum (800×440 kroki). Konum adı (ör.
-// "Kütüphane") backend'den gelir: /api/dugumler → config.DUGUM_KONUMLARI.
+// Düğüm → harita konumu, açıya göre iki set. Koordinatlar o açının viewBox biriminde
+// (fotoğraf pikseli): kusbakisi "15 0 1985 1230", perspektif "0 60 2000 1239".
+// Konum adı (ör. "Spor Kompleksi") backend'den gelir: /api/dugumler → config.DUGUM_KONUMLARI.
 // Burada olmayan düğümler haritaya çizilmez, yalnızca "Aktif düğüm" sayısına girer.
 export const DUGUM_KONUMLARI = {
-  dugum1: { x: 24.4, y: 28.4 },
-  dugum2: { x: 66.9, y: 27.3 },
-  dugum3: { x: 24.4, y: 75 },
+  kusbakisi: {
+    dugum1: { x: 690, y: 400 }, // Ana Bina · A Kanadı
+    dugum2: { x: 1297, y: 430 }, // Spor Kompleksi
+    dugum3: { x: 1245, y: 62 }, // Lojmanlar
+  },
+  perspektif: {
+    dugum1: { x: 850, y: 450 },
+    dugum2: { x: 630, y: 825 },
+    dugum3: { x: 1930, y: 880 }, // Lojmanlar kadraj dışında; düğüm sağ kenarda
+  },
 };
+
+// Her iki açıda da konumu tanımlı mı (gösterge/detay için seçilebilir düğümler)
+export const haritadaMi = (id) =>
+  Boolean(DUGUM_KONUMLARI.kusbakisi[id] && DUGUM_KONUMLARI.perspektif[id]);
 
