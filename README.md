@@ -52,6 +52,8 @@ Komutlar proje kökünden, backend venv aktifken çalıştırılır.
    `python scripts/senaryo.py yangin dugum1`
    → duman 30 sn'de kademeli yükselip eşiği (1800) aşar, ardından alev = kritik:
    alarm bandı, tehdit seviyesi KRİTİK, kırmızı harita halesi ve e-posta.
+   Histerezis sayesinde olay akışında yalnızca 4 olay görünür: duman eşiği aşıldı
+   (yüksek), alev (kritik), duman normale döndü ve alev söndü (bilgi).
    60 sn sonra duman düşer, alev "Yok" olur. Alarm bandındaki "Onayla" ile alarm
    onaylanır.
 5. **Bağlantı kopması (LWT):** `python scripts/senaryo.py kopma dugum3`

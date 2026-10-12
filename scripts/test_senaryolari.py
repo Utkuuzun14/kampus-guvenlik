@@ -1,10 +1,13 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T7).
+Test senaryoları scripti (rapor Tablo 6, T1-T8).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
 işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
 göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
 T7, test_dugum için LWT'li bir client açıp socket'ini temiz olmayan şekilde
 kapatır ve /api/dugumler'de çevrimdışı düşüp geri geldiğini doğrular.
+T8, duman/alev histerezisini doğrular (art arda eşik üstü ölçüm → tek olay).
+Backend histerezis durumunu bellekte tuttuğu için testler başta test_dugum'u
+normale çeker; böylece aynı backend açıkken tekrar çalıştırmak da tutarlıdır.
 
 Çalıştırmadan önce: broker + backend çalışıyor olmalı, sahte veri üreteci
 KAPATILMALI (test sonuçlarını kirletmemesi için).
@@ -136,6 +139,60 @@ def test_alarm_yok(client, no, ad, sensor, deger):
     return False
 
 
+def yeni_olaylar(onceki_id):
+    """onceki_id'den sonra test düğümü için oluşan olaylar (eski → yeni)."""
+    with urllib.request.urlopen(f"{API}/api/olaylar?limit=100", timeout=5) as r:
+        veri = json.loads(r.read().decode("utf-8"))
+    return sorted((o for o in veri if o["id"] > onceki_id and o["dugum"] == DUGUM),
+                  key=lambda o: o["id"])
+
+
+def normale_cek(client):
+    """Histerezis durumunu sıfırlar (oluşan bilgi olayları testi etkilemez)."""
+    yayinla(client, "duman", 400)
+    yayinla(client, "alev", 0)
+    time.sleep(1.5)
+
+
+def test_histerezis(client):
+    """
+    T8: Alarm fırtınası önleme. Art arda eşik üstü ölçüm tek yüksek olay üretir,
+    ölü bantta (1600-1800) olay yok, 1600 altına inince tek bilgi olayı.
+    Alev: 1 olarak kaldıkça olay yok, 1 → 0'da tek bilgi olayı (T3'ten devam).
+    """
+    print("\n[T8] Histerezis (alarm fırtınası önleme)")
+    kontroller = []
+
+    def adim(ad, olcumler, beklenen):
+        """olcumler: [(sensor, deger)], beklenen: [(sensor, seviye)]"""
+        onceki_id = son_olay_id()
+        for sensor, deger in olcumler:
+            yayinla(client, sensor, deger)
+            time.sleep(0.1)
+        time.sleep(1.5)
+        gelen = [(o["sensor"], o["seviye"]) for o in yeni_olaylar(onceki_id)]
+        tamam = gelen == beklenen
+        degerler = ", ".join(str(d) for _, d in olcumler)
+        print(f"    {'✓' if tamam else '✗'} {ad}: [{degerler}] → "
+              f"{len(gelen)} olay {gelen if gelen else ''}".rstrip())
+        kontroller.append(tamam)
+
+    # T2'den kalan duman alarmını kapat (bu adım sayılmaz)
+    yayinla(client, "duman", 1500)
+    time.sleep(1.5)
+
+    adim("art arda 5 eşik üstü ölçüm → tek yüksek olay",
+         [("duman", d) for d in (2100, 2500, 2900, 2300, 1900)], [("duman", "yuksek")])
+    adim("ölü bant (1600-1800) → olay yok", [("duman", 1700)], [])
+    adim("1600 altı → tek bilgi olayı (normale döndü)", [("duman", 1500)], [("duman", "bilgi")])
+    adim("alev 1 olarak kalıyor → olay yok", [("alev", 1), ("alev", 1)], [])
+    adim("alev 1 → 0 → tek bilgi olayı (söndü)", [("alev", 0)], [("alev", "bilgi")])
+
+    basarili = all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
 def test_bildirim():
     """
     T6: Gerçek mail göndermeden (SMTP mock) bildirim kurallarını doğrular.
@@ -143,7 +200,7 @@ def test_bildirim():
     """
     from types import SimpleNamespace
     from unittest import mock
-    from app import bildirim, mqtt_dinleyici
+    from app import bildirim, kurallar, mqtt_dinleyici
 
     print("\n[T6] Bildirim sistemi (e-posta, SMTP taklit edilerek)")
     dugum = "t6_dugum"
@@ -177,7 +234,7 @@ def test_bildirim():
 
     with mock.patch.object(bildirim, "_smtp_gonder", side_effect=yavas_gonderim) as smtp, \
             mock.patch.object(bildirim, "_saat", lambda: saat[0]), \
-            mock.patch.dict(bildirim._bekleme, clear=True), \
+            mock.patch.dict(bildirim._bekleme, clear=True),             mock.patch.dict(kurallar._alarm, clear=True), \
             mock.patch.object(config, "BILDIRIM_AKTIF", True), \
             mock.patch.object(mqtt_dinleyici.veritabani, "olay_ekle", sahte_olay_ekle), \
             mock.patch.object(mqtt_dinleyici.veritabani, "gecmis_ekle", lambda *a: None):
@@ -194,12 +251,16 @@ def test_bildirim():
         mesaj_isle("duman", 2500)
         kontrol("yüksek (duman) olayında mail gönderildi", smtp.call_count == 2)
 
+        # Histerezis: yeni alev olayı için önce söner (bilgi olayı, mail yok)
         saat[0] += 10
+        mesaj_isle("alev", 0)
+        kontrol("alev söndü (bilgi) olayında mail gönderilmedi", smtp.call_count == 2)
         mesaj_isle("alev", 1)
         kontrol(f"bekleme süresinde ({config.BILDIRIM_BEKLEME_SN} sn) ikinci alev maili engellendi",
                 smtp.call_count == 2)
 
         saat[0] += config.BILDIRIM_BEKLEME_SN
+        mesaj_isle("alev", 0)
         mesaj_isle("alev", 1)
         metin = smtp.call_args[0][2] if smtp.call_count == 3 else ""
         kontrol("süre dolunca yeni mail gitti, bastırılan olay yazıldı (+1 benzer olay)",
@@ -289,16 +350,20 @@ def main():
 
 def testleri_calistir(client):
     time.sleep(1)
+    normale_cek(client)
 
     sonuclar = []
     sonuclar.append(("T1", "Hareket algılama",
                      test_calistir(client, "T1", "Hareket algılama (PIR)", "hareket", 1, "orta")))
     sonuclar.append(("T2", "Duman/gaz eşik aşımı",
-                     test_calistir(client, "T2", "Duman/gaz eşik aşımı (MQ-2)", "duman", 2500, "yuksek")))
+                     test_calistir(client, "T2", "Duman/gaz eşik aşımı (MQ-2, normal → 2500)",
+                                   "duman", 2500, "yuksek")))
+    sonuclar.append(("T3", "Alev algılama",
+                     test_calistir(client, "T3", "Alev algılama (KY-026, 0 → 1)", "alev", 1, "kritik")))
+    # T8, T2/T3'ün açtığı alarmları da kapatır; T2b ondan sonra normal durumda koşar
+    sonuclar.append(("T8", "Histerezis (alarm fırtınası)", test_histerezis(client)))
     sonuclar.append(("T2b", "Duman normal (alarm yok)",
                      test_alarm_yok(client, "T2b", "Duman normal seviye (MQ-2)", "duman", 400)))
-    sonuclar.append(("T3", "Alev algılama",
-                     test_calistir(client, "T3", "Alev algılama (KY-026)", "alev", 1, "kritik")))
 
     # T4: MQTT iletimi (yukarıdaki testler zaten iletimi kanıtlıyor)
     print("\n[T4] MQTT mesaj iletimi")
@@ -329,7 +394,8 @@ def testleri_calistir(client):
     print("\n" + "=" * 60)
     print("ÖZET")
     print("=" * 60)
-    for no, ad, sonuc in sonuclar:
+    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8"]
+    for no, ad, sonuc in sorted(sonuclar, key=lambda x: sira.index(x[0])):
         if sonuc is True:
             durum = "BAŞARILI"
         elif sonuc is False:

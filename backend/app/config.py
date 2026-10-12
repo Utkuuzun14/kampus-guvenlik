@@ -28,6 +28,8 @@ MQTT_ALARM_KONU_SABLON = "kampus/guvenlik/{dugum}/alarm"
 # ---------------- Eşik / kural ayarları ----------------
 # MQ-2 duman/gaz analog eşiği (0-4095). Bu değeri aşınca "yuksek" alarm.
 ESIK_DUMAN = int(os.getenv("ESIK_DUMAN", "1800"))
+# Histerezis: alarmdaki düğüm bu değerin altına inince "normale döndü" sayılır.
+ESIK_DUMAN_NORMAL = int(os.getenv("ESIK_DUMAN_NORMAL", "1600"))
 # Bir düğümden kaç saniye haber gelmezse "çevrimdışı" sayılsın.
 CEVRIMDISI_SANIYE = int(os.getenv("CEVRIMDISI_SANIYE", "30"))
 

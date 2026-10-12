@@ -69,7 +69,7 @@ def _on_message(client, userdata, msg):
         print(f"[DB] gecmis_ekle hatası: {e}")
 
     # Kural motoruyla değerlendir
-    alarm_var, seviye, mesaj = kurallar.degerlendir(sensor, deger)
+    alarm_var, seviye, mesaj = kurallar.degerlendir(dugum, sensor, deger)
 
     print(f"[OLAY] {dugum}/{sensor} deger={deger} -> {seviye}: {mesaj}")
 

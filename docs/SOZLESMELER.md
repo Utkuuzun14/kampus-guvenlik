@@ -98,11 +98,29 @@ aşamasında güncellenebilir (yapılandırma dosyasından okunur).
 | Olay | Kaynak | Kural | Alarm seviyesi | Sistem tepkisi |
 |------|--------|-------|---------------|----------------|
 | Hareket | PIR | `deger == 1` | orta | Olay kaydı + panelde göster |
-| Duman/gaz | MQ-2 | `deger > ESIK_DUMAN` (varsayılan 1800) | yuksek | Olay kaydı + alarm konusu + e-posta |
-| Alev | KY-026 | `deger == 1` | kritik | Olay kaydı + alarm konusu + e-posta (öncelikli) |
-| Cihaz çevrimdışı | ESP32 | `durum == "offline"` veya X sn mesaj yok | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
+| Duman/gaz | MQ-2 | normal → `deger > ESIK_DUMAN` (1800) geçişi | yuksek | Olay kaydı + alarm konusu + e-posta |
+| Duman normale döndü | MQ-2 | alarmda → `deger < ESIK_DUMAN_NORMAL` (1600) geçişi | bilgi | Olay kaydı |
+| Alev | KY-026 | `0 → 1` geçişi | kritik | Olay kaydı + alarm konusu + e-posta (öncelikli) |
+| Alev söndü | KY-026 | `1 → 0` geçişi | bilgi | Olay kaydı |
+| Cihaz çevrimdışı | ESP32 | `durum == "offline"` (LWT veya temiz kapanış) | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
 
 Alarm seviyeleri: `bilgi < uyari < orta < yuksek < kritik`
+
+### Histerezis (alarm fırtınası önleme)
+- Duman ve alev için olay yalnızca **durum değişiminde** üretilir. Duman 1800'ü
+  ilk aştığında 1 `yuksek` olay oluşur; değer **1600'ün altına inene kadar** o
+  düğüm için yeni duman olayı oluşmaz (1600-1800 arası ölü bant). 1600 altına
+  inince 1 `bilgi` olayı ("Duman/gaz normale döndü") oluşur.
+- Alev: `0 → 1` geçişinde 1 `kritik` olay; 1 olarak kaldıkça yeni olay yok;
+  `1 → 0` geçişinde 1 `bilgi` olayı ("Alev söndü").
+- Durum düğüm bazında backend belleğinde tutulur. Backend yeniden başlarsa tüm
+  düğümler "normal" kabul edilir (alarm sürüyorsa bir sonraki eşik üstü ölçüm
+  yeni bir olay üretir).
+- Ölçümler (`sensor_gecmis`) her mesajda kaydedilir; histerezis yalnızca olay
+  üretimini etkiler. Hareket olayları histerezissiz (her `deger == 1` bir olay).
+- Eşikler `.env`: `ESIK_DUMAN` (1800), `ESIK_DUMAN_NORMAL` (1600).
+- Sessiz kalan (mesaj göndermeyen) düğüm olay üretmez; panelde `/api/dugumler`
+  kuralıyla çevrimdışı görünür (§6).
 
 ---
 
