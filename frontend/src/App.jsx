@@ -13,7 +13,8 @@ import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
 import OlayDetay from "./components/OlayDetay";
 import useDugumler, { useDumanSerisi } from "./hooks/useDugumler";
-import { useMudahaleIstatistigi } from "./hooks/useOlayDurumu";
+import { useMudahaleIstatistigi, olayGetir } from "./hooks/useOlayDurumu";
+import useGuvenlikModu from "./hooks/useGuvenlikModu";
 import {
   API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, haritadaMi,
 } from "./sabitler";
@@ -41,6 +42,13 @@ function App() {
   const wsRef = useRef(null);
   const yenidenBaglanRef = useRef(null);
   const [istatistik, istatistikYenile] = useMudahaleIstatistigi();
+  const mod = useGuvenlikModu();
+
+  // Detaydaki ilişkili olay bağlantısı: listede varsa oradan, yoksa API'den
+  const iliskiliAc = async (id) => {
+    const kayit = await olayGetir(id);
+    if (kayit) setSeciliOlay(kayit);
+  };
 
   // Durum güncellemesi (PATCH yanıtı veya WS "olay_guncelleme"): tüm listelerde yerinde
   const guncellemeUygula = (yeni) => {
@@ -118,7 +126,10 @@ function App() {
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
 
-      ws.onopen = () => setBaglanti("canli");
+      ws.onopen = () => {
+        setBaglanti("canli");
+        mod.yenile(); // kopukken kaçan mod değişikliği
+      };
 
       ws.onmessage = (olay) => {
         try {
@@ -132,6 +143,8 @@ function App() {
             }
           } else if (mesaj.tip === "olay_guncelleme" && mesaj.veri) {
             guncellemeUygula(mesaj.veri);
+          } else if (mesaj.tip === "mod" && mesaj.veri) {
+            mod.uygula(mesaj.veri);
           }
         } catch (e) {
           console.error("WS mesaj çözme hatası:", e);
@@ -252,7 +265,7 @@ function App() {
       <SolMenu />
 
       <div className="icerik">
-        <UstBar simdi={simdi} tehdit={tehdit} isiklar={isiklar} baglanti={baglanti} />
+        <UstBar simdi={simdi} tehdit={tehdit} isiklar={isiklar} baglanti={baglanti} mod={mod} />
 
         {bant.olay && (
           <AlarmBandi
@@ -312,6 +325,7 @@ function App() {
             konumlar={konumlar}
             onKapat={() => setSeciliOlay(null)}
             onGuncellendi={guncellemeUygula}
+            onIliskili={iliskiliAc}
           />
         )}
 

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useId } from "react";
-import { DURUM_AD, SEVIYE_AD, SENSOR_AD } from "../sabitler";
+import { DURUM_AD, SEVIYE_AD, SENSOR_AD, YANGIN_TEYIT } from "../sabitler";
 import {
   akistaMi, cumleDuzeni, durumu, seviyeAnahtari, sureBicim, tarihSaatBicim,
 } from "../hesaplar";
 import { olayGetir } from "../hooks/useOlayDurumu";
 import DurumRozeti from "./DurumRozeti";
 import DurumIlerlet from "./DurumIlerlet";
+import KuralRozeti from "./KuralRozeti";
 
 const ADIM_RENK = {
   olustu: "var(--metin-soluk)",
@@ -36,8 +37,44 @@ function adimlariKur(olay, adimlar) {
   return satirlar;
 }
 
+// Bileşik olayı tetikleyen olaylar; her biri tıklanınca kendi detayını açar.
+function IliskiliOlaylar({ idler, onIliskili }) {
+  const [kayitlar, setKayitlar] = useState({});
+
+  useEffect(() => {
+    let iptal = false;
+    Promise.all(idler.map((id) => olayGetir(id))).then((liste) => {
+      if (iptal) return;
+      setKayitlar(Object.fromEntries(liste.filter(Boolean).map((o) => [o.id, o])));
+    });
+    return () => {
+      iptal = true;
+    };
+  }, [idler]);
+
+  return (
+    <div className="iliskili">
+      <span className="tehdit-etiket">İlişkili olaylar</span>
+      <ul>
+        {idler.map((id) => {
+          const o = kayitlar[id];
+          return (
+            <li key={id}>
+              <button type="button" className="metin-btn iliskili-btn" onClick={() => onIliskili(id)}>
+                #{id}{o ? ` · ${cumleDuzeni(o.mesaj)}` : ""}
+              </button>
+              {o && <span className="kucuk-mono">{tarihSaatBicim(o.zaman)}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // Olay detayı ve zaman çizelgesi. olay: listelerdeki güncel kayıt (WS ile güncellenir).
-export default function OlayDetay({ olay, konumlar, onKapat, onGuncellendi }) {
+// onIliskili(id): ilişkili olay bağlantısına tıklanınca o olayın detayını açar.
+export default function OlayDetay({ olay, konumlar, onKapat, onGuncellendi, onIliskili }) {
   const [adimlar, setAdimlar] = useState(null);
   const dialogRef = useRef(null);
   const baslikId = useId();
@@ -65,6 +102,7 @@ export default function OlayDetay({ olay, konumlar, onKapat, onGuncellendi }) {
   const konum = konumlar[olay.dugum];
   const akista = akistaMi(olay);
   const satirlar = adimlariKur(olay, olay.adimlar ?? adimlar ?? []);
+  const teyit = olay.sensor === YANGIN_TEYIT;
 
   return (
     <dialog ref={dialogRef} className="olay-detay kart" aria-labelledby={baslikId}
@@ -75,7 +113,7 @@ export default function OlayDetay({ olay, konumlar, onKapat, onGuncellendi }) {
           <span id={baslikId} className="bolum-baslik">{cumleDuzeni(olay.mesaj)}</span>
           <span className="bolum-alt">
             {olay.dugum}{konum ? ` · ${konum}` : ""} · {SENSOR_AD[olay.sensor] ?? olay.sensor}
-            {olay.deger != null ? ` · değer ${olay.deger}` : ""}
+            {olay.deger != null ? (teyit ? ` · duman ${olay.deger} + alev` : ` · değer ${olay.deger}`) : ""}
           </span>
         </div>
         <button type="button" className="filtre-btn" onClick={() => dialogRef.current?.close()}
@@ -89,7 +127,13 @@ export default function OlayDetay({ olay, konumlar, onKapat, onGuncellendi }) {
           {s ? SEVIYE_AD[s] : olay.seviye}
         </span>
         {akista && <DurumRozeti olay={olay} />}
+        {teyit && <span className="teyit-etiket">YANGIN TEYİTLİ</span>}
+        <KuralRozeti kural={olay.kural} />
       </div>
+
+      {olay.iliskili?.length > 0 && (
+        <IliskiliOlaylar idler={olay.iliskili} onIliskili={onIliskili} />
+      )}
 
       {akista ? (
         <ol className="zaman-cizelgesi" aria-label="Zaman çizelgesi">

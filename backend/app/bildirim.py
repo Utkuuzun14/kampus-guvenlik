@@ -40,6 +40,7 @@ SENSOR_AD = {
     "duman": "MQ-2 duman/gaz sensörü",
     "alev": "KY-026 alev sensörü",
     "durum": "Cihaz durumu",
+    "yangin_teyit": "Korelasyon (duman + alev)",
 }
 # Konu satırındaki kısa olay başlığı
 OLAY_BASLIK = {
@@ -47,6 +48,16 @@ OLAY_BASLIK = {
     "duman": "Duman/gaz eşiği aşıldı",
     "alev": "Alev algılandı",
     "durum": "Cihaz çevrimdışı",
+    "yangin_teyit": "YANGIN TEYİTLİ",
+}
+# Olaydaki kural etiketinin mailde görünen adı
+KURAL_AD = {
+    "histerezis": "Histerezis (eşik)",
+    "gece_modu": "Gece modu",
+    "mesai_disi": "Mesai dışı",
+    "mesai": "Mesai saati",
+    "korelasyon": "Korelasyon (duman + alev)",
+    "baglanti": "Bağlantı (LWT)",
 }
 
 # (dugum, sensor, seviye) -> {"son": son gönderim (monotonic), "bastirilan": int}
@@ -75,6 +86,8 @@ def _deger_metni(sensor, deger):
         return f"{deger} ({'algılandı' if deger == 1 else 'yok'})"
     if sensor == "durum":
         return "çevrimdışı" if deger == 0 else "çevrimiçi"
+    if sensor == "yangin_teyit":
+        return f"duman {deger if deger is not None else '?'} + alev 1"
     return str(deger)
 
 
@@ -106,6 +119,10 @@ def mail_olustur(olay, bastirilan=0):
         ("Değer", deger),
         ("Zaman", zaman),
     ]
+    if olay.get("kural"):
+        satirlar.append(("Kural", KURAL_AD.get(olay["kural"], olay["kural"])))
+    if olay.get("iliskili"):
+        satirlar.append(("İlişkili", ", ".join(f"#{i}" for i in olay["iliskili"])))
 
     metin = "\n".join(
         [f"[{etiket}] {baslik}", ""]

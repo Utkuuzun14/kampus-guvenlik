@@ -1,5 +1,5 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T9).
+Test senaryoları scripti (rapor Tablo 6, T1-T11).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
 işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
 göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
@@ -8,6 +8,11 @@ kapatır ve /api/dugumler'de çevrimdışı düşüp geri geldiğini doğrular.
 T8, duman/alev histerezisini doğrular (art arda eşik üstü ölçüm → tek olay).
 T9, olay yaşam döngüsünü doğrular: PATCH /api/olaylar/{id}/durum ile ileri
 geçişler, geri gitmede 409, WebSocket olay_guncelleme ve /api/istatistik/mudahale.
+T10, yangın teyidini (duman + alev korelasyonu) canlı ve kural fonksiyonu
+üzerinden doğrular. T11, güvenlik modunu (PUT/GET /api/ayarlar/mod, WS "mod")
+ve moda/saate bağlı hareket kuralını doğrular.
+Hareket beklentileri "orta" olduğundan script başta güvenlik modunu mesai_disi
+yapar ve sonunda (hata olsa da) kullanıcının önceki moduna geri alır.
 Backend histerezis durumunu bellekte tuttuğu için testler başta test_dugum'u
 normale çeker; böylece aynı backend açıkken tekrar çalıştırmak da tutarlıdır.
 
@@ -23,6 +28,7 @@ test_dugum kayıtları olaylar, olay_adimlari ve sensor_gecmis tablolarından si
 import json
 import time
 import sys
+from datetime import datetime
 import os
 import sqlite3
 import threading
@@ -34,7 +40,7 @@ from websockets.sync.client import connect as ws_baglan  # uvicorn bağımlılı
 
 BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
 sys.path.insert(0, BACKEND_DIZINI)
-from app import config  # noqa: E402
+from app import config, kurallar  # noqa: E402
 import sahte_veri  # noqa: E402  (aynı dizin: LWT'li client ve kopma fonksiyonu)
 
 API = "http://127.0.0.1:8000"
@@ -117,13 +123,18 @@ def test_calistir(client, no, ad, sensor, deger, beklenen_seviye):
     print(f"    Gönderiliyor: {sensor} = {deger}")
     yayinla(client, sensor, deger)
     time.sleep(1.5)  # backend işlesin
-    olay = son_olay()
+    # Son olaya değil bu sensörün yeni olayına bakılır: aynı mesaj bileşik bir
+    # olay da üretebilir (ör. T2'den hemen sonra T3 → yangin_teyit)
+    yeni = yeni_olaylar(onceki_id)
+    olay = next((o for o in yeni if o["sensor"] == sensor), None)
 
-    if not olay or olay["id"] <= onceki_id:
-        print(f"    ✗ BAŞARISIZ (yeni olay oluşmadı, son id: {onceki_id})")
+    if not olay:
+        print(f"    ✗ BAŞARISIZ (yeni {sensor} olayı oluşmadı, son id: {onceki_id})")
         return False
-    if (olay["dugum"] == DUGUM and olay["sensor"] == sensor
-            and olay["seviye"] == beklenen_seviye):
+    for ek in yeni:
+        if ek is not olay:
+            print(f"    Ek olay: #{ek['id']} {ek['sensor']}/{ek['seviye']} - {ek['mesaj']}")
+    if olay["seviye"] == beklenen_seviye:
         print(f"    Sonuç: #{olay['id']} {olay['seviye']} - {olay['mesaj']}")
         print(f"    ✓ BAŞARILI (beklenen seviye: {beklenen_seviye})")
         return True
@@ -209,6 +220,8 @@ def test_bildirim():
     """
     T6: Gerçek mail göndermeden (SMTP mock) bildirim kurallarını doğrular.
     MQTT dinleyicinin mesaj işleyicisi süreç içinde, sahte DB ile çağrılır.
+    Yalnızca tekil olayların bildirimi ölçülür: korelasyon kapatılır (teyit
+    maili T10'da) ve mod mesai_disi'ye sabitlenir (hareket = orta).
     """
     from types import SimpleNamespace
     from unittest import mock
@@ -234,9 +247,10 @@ def test_bildirim():
                 t.join(5)
         return sure
 
-    def sahte_olay_ekle(dugum_, sensor, deger, seviye, mesaj, zaman):
+    def sahte_olay_ekle(dugum_, sensor, deger, seviye, mesaj, zaman, kural=None, iliskili=None):
         return {"id": 0, "dugum": dugum_, "sensor": sensor, "deger": deger,
-                "seviye": seviye, "mesaj": mesaj, "zaman": zaman}
+                "seviye": seviye, "mesaj": mesaj, "zaman": zaman,
+                "kural": kural, "iliskili": iliskili}
 
     kontroller = []
 
@@ -246,7 +260,11 @@ def test_bildirim():
 
     with mock.patch.object(bildirim, "_smtp_gonder", side_effect=yavas_gonderim) as smtp, \
             mock.patch.object(bildirim, "_saat", lambda: saat[0]), \
-            mock.patch.dict(bildirim._bekleme, clear=True),             mock.patch.dict(kurallar._alarm, clear=True), \
+            mock.patch.dict(bildirim._bekleme, clear=True), \
+            mock.patch.dict(kurallar._alarm, clear=True), \
+            mock.patch.dict(kurallar._korelasyon, clear=True), \
+            mock.patch.object(config, "KORELASYON_PENCERE_SN", -1), \
+            mock.patch.object(kurallar, "mod_getir", lambda: "mesai_disi"), \
             mock.patch.object(config, "BILDIRIM_AKTIF", True), \
             mock.patch.object(mqtt_dinleyici.veritabani, "olay_ekle", sahte_olay_ekle), \
             mock.patch.object(mqtt_dinleyici.veritabani, "gecmis_ekle", lambda *a: None):
@@ -464,6 +482,211 @@ def test_yasam_dongusu(client, baslangic):
     return basarili
 
 
+def test_korelasyon(client):
+    """
+    T10: Yangın teyidi. Duman alarmı + alev KORELASYON_PENCERE_SN içinde
+    (sıra fark etmeksizin) tek bir yangin_teyit (kritik) olayı üretir; yangın
+    sürerken tekrar üretmez; normale dönüp yeniden yanınca yeni teyit üretir.
+    Pencere dışı durum, pencereyi düşürmek yerine kural fonksiyonuyla denenir.
+    """
+    from app import bildirim
+
+    print(f"\n[T10] Yangın teyidi (korelasyon, pencere {config.KORELASYON_PENCERE_SN} sn)")
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(bool(kosul))
+
+    def gonder(olcumler, ara=0.1):
+        """olcumler: [(sensor, deger, sonra_bekle)] → bu adımda oluşan olaylar"""
+        onceki_id = son_olay_id()
+        for sensor, deger, bekle in olcumler:
+            yayinla(client, sensor, deger)
+            time.sleep(bekle or ara)
+        time.sleep(1.5)
+        return yeni_olaylar(onceki_id)
+
+    def teyitler(olaylar):
+        return [o for o in olaylar if o["sensor"] == "yangin_teyit"]
+
+    def bul(olaylar, sensor, seviye):
+        return next((o for o in olaylar if o["sensor"] == sensor and o["seviye"] == seviye), None)
+
+    try:
+        normale_cek(client)
+
+        # 1) Duman eşiği aşılır, 2 sn sonra alev
+        olaylar = gonder([("duman", 2500, 2.0), ("alev", 1, 0)])
+        duman, alev, t = bul(olaylar, "duman", "yuksek"), bul(olaylar, "alev", "kritik"), teyitler(olaylar)
+        teyit = t[0] if len(t) == 1 else None
+        kontrol(f"duman 2500 → 2 sn → alev=1: tek yangin_teyit "
+                f"({len(t)} teyit; {teyit['mesaj'] if teyit else '-'})",
+                duman and alev and teyit and teyit["seviye"] == "kritik"
+                and teyit["mesaj"].startswith("Yangın teyitli: duman + alev"))
+        kontrol(f"iliskili = [duman, alev] id'leri ({teyit['iliskili'] if teyit else '-'}), "
+                f"kural=korelasyon, durum=yeni",
+                teyit and duman and alev and teyit["iliskili"] == [duman["id"], alev["id"]]
+                and teyit["kural"] == "korelasyon" and teyit["durum"] == "yeni")
+        kontrol("orijinal duman/alev olayları korundu (kural=histerezis)",
+                duman and alev and duman["kural"] == "histerezis" and alev["kural"] == "histerezis")
+        if teyit:
+            _, detay = api_istek(f"/api/olaylar/{teyit['id']}")
+            kontrol(f"GET /api/olaylar/{teyit['id']} iliskili liste döner",
+                    detay.get("iliskili") == teyit["iliskili"])
+
+        # 2) Yangın sürüyor: tekrar ölçüm ve alevin söndüp yeniden yanması → teyit yok
+        olaylar = gonder([("duman", 2900, 0), ("alev", 1, 0), ("alev", 0, 0), ("alev", 1, 0)])
+        kontrol(f"yangın sürerken (duman alarmda) alev 0 → 1: yeni teyit yok "
+                f"({[(o['sensor'], o['seviye']) for o in olaylar]})",
+                not teyitler(olaylar) and bul(olaylar, "alev", "kritik"))
+
+        # 3) Normale dönüş → yeniden yangın → yeni teyit
+        normale_cek(client)
+        olaylar = gonder([("duman", 2500, 1.0), ("alev", 1, 0)])
+        kontrol(f"normale dönüp (duman <1600, alev 0) yeniden yangın → yeni teyit "
+                f"({len(teyitler(olaylar))} teyit)", len(teyitler(olaylar)) == 1)
+
+        # 4) Ters sıra: önce alev, sonra duman
+        normale_cek(client)
+        olaylar = gonder([("alev", 1, 2.0), ("duman", 2500, 0)])
+        t = teyitler(olaylar)
+        alev, duman = bul(olaylar, "alev", "kritik"), bul(olaylar, "duman", "yuksek")
+        kontrol(f"ters sıra (alev → 2 sn → duman) → teyit, iliskili [alev, duman] "
+                f"({t[0]['iliskili'] if t else '-'})",
+                len(t) == 1 and alev and duman and t[0]["iliskili"] == [alev["id"], duman["id"]])
+        normale_cek(client)
+    except Exception as e:
+        print(f"    ✗ hata: {e}")
+        kontroller.append(False)
+
+    # Kural fonksiyonu (saf): pencere sınırı ve kilit
+    p = 10
+    d = {}
+    kurallar.korelasyon(d, "duman", "alarm", 1, 100.0, p)
+    kontrol("birim: duman t=100, alev t=111 (pencere dışı) → teyit yok",
+            kurallar.korelasyon(d, "alev", "alarm", 2, 111.0, p) is None)
+    d = {}
+    kurallar.korelasyon(d, "duman", "alarm", 1, 100.0, p)
+    kontrol("birim: duman t=100, alev t=110 (sınırda) → teyit [1, 2]",
+            kurallar.korelasyon(d, "alev", "alarm", 2, 110.0, p) == [1, 2])
+    kurallar.korelasyon(d, "alev", "normal", 3, 111.0, p)
+    kontrol("birim: duman alarmdayken alev söner ve yanar → kilit, teyit yok",
+            kurallar.korelasyon(d, "alev", "alarm", 4, 112.0, p) is None)
+    kurallar.korelasyon(d, "alev", "normal", 5, 113.0, p)
+    kurallar.korelasyon(d, "duman", "normal", 6, 114.0, p)
+    kurallar.korelasyon(d, "alev", "alarm", 7, 200.0, p)
+    kontrol("birim: ikisi de normale döndükten sonra alev → duman → yeni teyit [7, 8]",
+            kurallar.korelasyon(d, "duman", "alarm", 8, 205.0, p) == [7, 8])
+
+    konu, _, metin = bildirim.mail_olustur({
+        "dugum": "dugum1", "sensor": "yangin_teyit", "seviye": "kritik", "deger": 2500,
+        "mesaj": kurallar.teyit_mesaji("dugum1"), "zaman": int(time.time()),
+        "kural": "korelasyon", "iliskili": [412, 413]})
+    kontrol(f"e-posta konusu: {konu}",
+            konu.startswith("[KRİTİK] YANGIN TEYİTLİ") and "#412, #413" in metin)
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
+def mod_ayarla(mod):
+    """PUT /api/ayarlar/mod → (HTTP kodu, gövde)"""
+    return api_istek("/api/ayarlar/mod", "PUT", {"mod": mod})
+
+
+def test_mod(client):
+    """
+    T11: Güvenlik modu + zamana bağlı hareket kuralı. Mod PUT ile değiştirilir,
+    hareket=1 seviyesi doğrulanır; otomatik mod saat eşlemesi hareket_seviyesi
+    üzerinden belirli saatlerle birim test edilir. Mod main()'de geri alınır.
+    """
+    from unittest import mock
+
+    print("\n[T11] Güvenlik modu ve zamana bağlı hareket kuralı")
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(bool(kosul))
+
+    def hareket_olayi():
+        onceki_id = son_olay_id()
+        yayinla(client, "hareket", 1)
+        time.sleep(1.5)
+        return next((o for o in yeni_olaylar(onceki_id) if o["sensor"] == "hareket"), None)
+
+    try:
+        with ws_baglan(WS_URL, open_timeout=5) as ws:
+            kod, v = mod_ayarla("mesai")
+            mesaj = ws_mesaj_bekle(ws, lambda m: m.get("tip") == "mod")
+            kontrol(f"PUT mesai → {kod} {v}", kod == 200 and v["mod"] == "mesai"
+                    and v["etkin_mod"] == "mesai" and v.get("aciklama"))
+            kontrol("WebSocket mod mesajı geldi (mod=mesai)",
+                    mesaj and mesaj["veri"]["mod"] == "mesai")
+        o = hareket_olayi()
+        kontrol(f"mesai: hareket → {o and o['seviye']}, {o and o['durum']}/{o and o['onaylayan']}, "
+                f"kural={o and o['kural']} ({o and o['mesaj']})",
+                o and o["seviye"] == "bilgi" and o["durum"] == "cozuldu"
+                and o["onaylayan"] == "sistem" and o["kural"] == "mesai")
+
+        mod_ayarla("mesai_disi")
+        o = hareket_olayi()
+        kontrol(f"mesai_disi: hareket → {o and o['seviye']}, kural={o and o['kural']}",
+                o and o["seviye"] == "orta" and o["durum"] == "yeni" and o["kural"] == "mesai_disi")
+
+        mod_ayarla("gece")
+        o = hareket_olayi()
+        kontrol(f"gece: hareket → {o and o['seviye']}, kural={o and o['kural']} ({o and o['mesaj']})",
+                o and o["seviye"] == "yuksek" and o["kural"] == "gece_modu"
+                and "gece modu" in o["mesaj"])
+
+        kod, v = api_istek("/api/ayarlar/mod")
+        kontrol(f"GET /api/ayarlar/mod → {kod} {v}",
+                kod == 200 and v["mod"] == "gece" and v["etkin_mod"] == "gece")
+        kodlar = [mod_ayarla("tatil")[0], api_istek("/api/ayarlar/mod", "PUT", {})[0]]
+        kontrol(f"geçersiz mod / boş gövde → {kodlar}", kodlar == [422, 422])
+        kontrol("geçersiz istek modu değiştirmedi",
+                api_istek("/api/ayarlar/mod")[1]["mod"] == "gece")
+    except Exception as e:
+        print(f"    ✗ hata: {e}")
+        kontroller.append(False)
+
+    # Otomatik mod: saat eşlemesi (varsayılan saatlerle, .env'den bağımsız)
+    tz = config.SAAT_DILIMI
+    vakalar = [
+        ("hafta içi 10:00", datetime(2026, 10, 14, 10, 0, tzinfo=tz), "bilgi", "mesai"),
+        ("hafta içi 20:00", datetime(2026, 10, 14, 20, 0, tzinfo=tz), "orta", "mesai_disi"),
+        ("hafta içi 02:00", datetime(2026, 10, 14, 2, 0, tzinfo=tz), "yuksek", "gece_modu"),
+        ("cumartesi 11:00", datetime(2026, 10, 17, 11, 0, tzinfo=tz), "orta", "mesai_disi"),
+        ("cumartesi 02:00", datetime(2026, 10, 17, 2, 0, tzinfo=tz), "yuksek", "gece_modu"),
+        ("sınır 08:00", datetime(2026, 10, 14, 8, 0, tzinfo=tz), "bilgi", "mesai"),
+        ("sınır 18:00", datetime(2026, 10, 14, 18, 0, tzinfo=tz), "orta", "mesai_disi"),
+        ("sınır 23:00", datetime(2026, 10, 14, 23, 0, tzinfo=tz), "yuksek", "gece_modu"),
+        ("sınır 06:00", datetime(2026, 10, 14, 6, 0, tzinfo=tz), "orta", "mesai_disi"),
+    ]
+    saatler = {"MESAI_BASLANGIC": "08:00", "MESAI_BITIS": "18:00",
+               "GECE_BASLANGIC": "23:00", "GECE_BITIS": "06:00"}
+    with mock.patch.multiple(config, **{k: datetime.strptime(v, "%H:%M").time()
+                                        for k, v in saatler.items()}):
+        sonuc = [(ad, kurallar.hareket_seviyesi("otomatik", t)[:2], (sev, kural))
+                 for ad, t, sev, kural in vakalar]
+        elle = [kurallar.hareket_seviyesi(m, vakalar[0][1])[0]
+                for m in ("mesai", "mesai_disi", "gece")]
+    hatali = [f"{ad}: {bulunan} ≠ {beklenen}" for ad, bulunan, beklenen in sonuc
+              if bulunan != beklenen]
+    kontrol(f"birim: otomatik saat eşlemesi {len(vakalar) - len(hatali)}/{len(vakalar)} "
+            f"(hafta içi 10:00 bilgi, 20:00 orta, 02:00 yüksek, cumartesi 11:00 orta)"
+            + (f" — {hatali}" if hatali else ""), not hatali)
+    kontrol(f"birim: elle seçilen mod saatten bağımsız (mesai/mesai_disi/gece → {elle})",
+            elle == ["bilgi", "orta", "yuksek"])
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
 def main():
     print("=" * 60)
     print("KAMPÜS GÜVENLİK SİSTEMİ - TEST SENARYOLARI (Tablo 6)")
@@ -471,12 +694,24 @@ def main():
     print("Not: Broker + backend çalışmalı, sahte üreteç kapalı olmalı.")
 
     baslangic = son_kayit_idleri()
+    # T1-T9 hareketi "orta" bekler: testler mesai_disi modunda koşar,
+    # kullanıcının modu sonunda geri yüklenir
+    try:
+        onceki_mod = api_istek("/api/ayarlar/mod")[1]["mod"]
+        mod_ayarla("mesai_disi")
+        print(f"Güvenlik modu test süresince mesai_disi (önceki: {onceki_mod}).")
+    except Exception as e:
+        onceki_mod = None
+        print(f"Güvenlik modu okunamadı ({e}); backend çalışıyor mu?")
     client = mqtt_baglan()
     try:
         testleri_calistir(client, baslangic)
     finally:
         client.loop_stop()
         client.disconnect()
+        if onceki_mod:
+            kod, _ = mod_ayarla(onceki_mod)
+            print(f"\nGüvenlik modu geri alındı: {onceki_mod} (HTTP {kod})")
         test_verisini_temizle(baslangic)
 
 
@@ -522,12 +757,14 @@ def testleri_calistir(client, baslangic):
     sonuclar.append(("T6", "Bildirim (e-posta)", test_bildirim()))
     sonuclar.append(("T7", "LWT: çevrimdışı ve geri gelme", test_lwt()))
     sonuclar.append(("T9", "Olay yaşam döngüsü (onaylama)", test_yasam_dongusu(client, baslangic)))
+    sonuclar.append(("T10", "Yangın teyidi (korelasyon)", test_korelasyon(client)))
+    sonuclar.append(("T11", "Güvenlik modu (zaman kuralı)", test_mod(client)))
 
     # Özet
     print("\n" + "=" * 60)
     print("ÖZET")
     print("=" * 60)
-    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
+    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11"]
     for no, ad, sonuc in sorted(sonuclar, key=lambda x: sira.index(x[0])):
         if sonuc is True:
             durum = "BAŞARILI"

@@ -1,13 +1,15 @@
-import { SEVIYE_RENK, SENSOR_AD } from "../sabitler";
+import { SEVIYE_RENK, SENSOR_AD, YANGIN_TEYIT } from "../sabitler";
 import { akistaMi, cumleDuzeni, saatBicim, seviyeAnahtari } from "../hesaplar";
 import DurumRozeti from "./DurumRozeti";
 import DurumIlerlet from "./DurumIlerlet";
+import KuralRozeti from "./KuralRozeti";
 
 // "Duman/gaz eşiği aşıldı (deger=2140)" → "Duman/gaz eşiği aşıldı"
 const baslikYap = (mesaj) => cumleDuzeni(String(mesaj ?? "").replace(/\s*\([^)]*\)\s*$/, ""));
 
 const detayYap = (o, konumlar) => {
   if (o.sensor === "duman") return `${o.dugum} · ${o.deger}`;
+  if (o.sensor === YANGIN_TEYIT) return `${o.dugum} · duman ${o.deger ?? "?"} + alev`;
   const konum = konumlar[o.dugum];
   return `${o.dugum} · ${konum ?? SENSOR_AD[o.sensor] ?? o.sensor}`;
 };
@@ -27,8 +29,9 @@ export default function OlayAkisi({ olaylar, konumlar, onGuncellendi, onDetay })
         {son.length === 0 && <span className="bolum-alt">Henüz olay yok.</span>}
         {son.map((o, i) => {
           const renk = SEVIYE_RENK[seviyeAnahtari(o.seviye)] ?? "#94a3b8";
+          const teyit = o.sensor === YANGIN_TEYIT;
           return (
-            <div key={o.id ?? i} className="akis-satir">
+            <div key={o.id ?? i} className={teyit ? "akis-satir akis-teyit" : "akis-satir"}>
               <div className="akis-ray">
                 <span className="akis-nokta" style={{ "--renk": renk }} />
                 {i < son.length - 1 && <span className="akis-cizgi" />}
@@ -40,7 +43,11 @@ export default function OlayAkisi({ olaylar, konumlar, onGuncellendi, onDetay })
                   </button>
                   <span className="kucuk-mono">{saatBicim(o.zaman)}</span>
                 </div>
-                <span className="bolum-alt">{detayYap(o, konumlar)}</span>
+                <div className="akis-alt">
+                  {teyit && <span className="teyit-etiket">YANGIN TEYİTLİ</span>}
+                  <span className="bolum-alt">{detayYap(o, konumlar)}</span>
+                  <KuralRozeti kural={o.kural} />
+                </div>
                 {akistaMi(o) && (
                   <div className="akis-durum">
                     <DurumRozeti olay={o} />

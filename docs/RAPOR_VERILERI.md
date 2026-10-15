@@ -12,6 +12,7 @@ Derleme tarihi: 12 Ekim 2026. Ölçümler `scripts/olcum.py` ile alındı.
 5. Kurulum ve sunum senaryosu (README)
 6. Ortak sözleşmeler (docs/SOZLESMELER.md, tamamı)
 7. Test sonuçları (docs/TEST_SONUCLARI.md, tamamı)
+8. Akıllı kurallar: korelasyon ve bağlama duyarlı kural motoru (15 Ekim 2026 eki)
 
 ---
 
@@ -557,3 +558,69 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
   24 yüksek olay üretiyordu. Ölçümlerin hepsi sensor_gecmis'e yazıldı.
 - Gerçek SMTP gönderimi scripts/eposta_test.py ile ayrıca doğrulandı (12 Ekim 2026,
   Gmail SMTP SSL 465).
+
+---
+
+## 8. Akıllı kurallar (15 Ekim 2026 eki)
+
+Bu bölüm 12 Ekim derlemesinden sonra eklenen kural motorunu özetler; ayrıntılı
+sözleşme `docs/SOZLESMELER.md` §4, §5 ve §6.2'de, test sonuçları
+`docs/TEST_SONUCLARI.md`'de (T10, T11) yer alır. Kod: `backend/app/kurallar.py`.
+
+### Neden gerekli
+Eşik tabanlı tekil kurallar iki sorun doğurur:
+- **Yanlış alarm:** MQ-2 duman/gaz sensörü yalnız başına sigara dumanı, buhar ya
+  da sensör ısınması gibi nedenlerle eşiği aşabilir; alev sensörü de güneş ışığı
+  yansımasıyla tetiklenebilir. Tek sensörün alarmı "olası" bir olaydır.
+- **Önceliklendirme eksikliği:** aynı PIR hareketi mesai saatinde sıradan,
+  gece ise izinsiz giriş belirtisidir. Bağlamı bilmeyen bir kural her hareketi
+  aynı seviyede üretir; operatör ya alarm yorgunluğu yaşar ya da gerçek tehdidi
+  kaçırır.
+
+### 1) Korelasyon kuralı: yangın teyidi
+- Aynı düğümde duman alarm durumuna geçişi ve alev algılaması, sıra fark
+  etmeksizin 10 sn (`KORELASYON_PENCERE_SN`) içinde gelirse ayrı bir **kritik**
+  bileşik olay üretilir: "Yangın teyitli: duman + alev (<konum>)".
+- İki bağımsız fiziksel ilke (gaz/partikül ve kızılötesi alev) aynı anda tetiklendiği
+  için olay **teyitli** kabul edilir; tekil olaylar kaybolmaz, teyit onlara eklenir
+  ve hangi olaylardan doğduğunu (`iliskili`) taşır.
+- Aynı yangın için tek teyit üretilir (iki sensör de normale dönene kadar kilit):
+  histerezisle birlikte alarm fırtınasını önler.
+- Panelde alarm bandı ve olay akışında "YANGIN TEYİTLİ" etiketi, detayda tetikleyen
+  olaylara bağlantı; e-posta konusu "[KRİTİK] YANGIN TEYİTLİ — …".
+
+### 2) Bağlama duyarlı kural: güvenlik modu
+- Modlar: otomatik, mesai, mesai dışı, gece. Hareket seviyesi moda göre:
+  mesai → bilgi (otomatik çözülür), mesai dışı → orta, gece → yüksek (e-posta).
+- Otomatik modda karar **sunucu saatiyle** verilir (hafta içi 08:00–18:00 mesai,
+  23:00–06:00 gece, kalanı mesai dışı); cihaz saati kayabileceği için kullanılmaz.
+- Mod kalıcıdır (`ayarlar` tablosu), panelden değiştirilir ve WebSocket ile tüm
+  açık sekmelere anında yayılır.
+- Kural fonksiyonu saftır (`hareket_seviyesi(mod, simdi)`): saat parametreyle
+  verildiğinden birim testle her an denenebilir.
+
+### Açıklanabilirlik
+Her olay onu üreten kuralın etiketini taşır (`olaylar.kural`: histerezis,
+mesai, mesai_disi, gece_modu, korelasyon, baglanti). Panel bunu rozet olarak,
+mesaj metni de uygulanan bağlamı ("Hareket algılandı · gece modu") gösterir;
+operatör bir alarmın neden o seviyede olduğunu görebilir.
+
+### Yeni arayüzler ve şema
+| Tür | Ad | Açıklama |
+|---|---|---|
+| REST | `GET /api/ayarlar/mod` | `{mod, etkin_mod, aciklama}` |
+| REST | `PUT /api/ayarlar/mod` | `{mod}`; geçersiz değer 422; değişince WS yayını |
+| WS | `{"tip": "mod", "veri": {...}}` | mod değişti ya da otomatikte etkin mod saatle değişti |
+| Kolon | `olaylar.kural` (TEXT) | olayı üreten kural |
+| Kolon | `olaylar.iliskili` (TEXT, JSON liste) | bileşik olayın tetikleyen olay id'leri |
+| Tablo | `ayarlar (anahtar TEXT PK, deger TEXT)` | kalıcı ayarlar (`guvenlik_modu`) |
+
+Kolonlar ve tablo kayıpsız göçle eklenir (mevcut kayıtlar korunur, alanlar NULL).
+MQTT konu/payload sözleşmesi ve histerezis eşikleri değişmedi.
+
+### Doğrulama (15 Ekim 2026)
+| Test | Sonuç |
+|---|---|
+| T10 Yangın teyidi | 12/12 kontrol: duman→alev ve alev→duman sırasında tek teyit, yangın sürerken tekrar yok, normalden sonra yeni teyit; 11 sn fark (pencere dışı) teyit üretmiyor |
+| T11 Güvenlik modu | 10/10 kontrol: mesai bilgi, mesai dışı orta, gece yüksek; geçersiz mod 422; otomatik saat eşlemesi 9/9 (hafta içi 10:00, 20:00, 02:00, cumartesi 11:00 ve sınır saatleri) |
+| T1–T9 regresyon | Hepsi başarılı (mod test süresince mesai dışı) |

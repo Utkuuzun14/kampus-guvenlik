@@ -1,7 +1,7 @@
 // Olay verisinden panel göstergelerini hesaplayan saf fonksiyonlar.
 // Olay listeleri yeni → eski sıralıdır (REST ve WebSocket bu sırayı korur).
 import {
-  SEVIYELER, SEVIYE_AD, TEHDIT_PENCERE_SN, DURUMLAR, AKIS_SEVIYELERI,
+  SEVIYELER, SEVIYE_AD, TEHDIT_PENCERE_SN, DURUMLAR, AKIS_SEVIYELERI, YANGIN_TEYIT,
 } from "./sabitler";
 
 // Türkçe karakterleri ASCII'ye çevirir ("yüksek" → "yuksek")
@@ -82,14 +82,16 @@ export function sureBicim(sn) {
   return `${Math.floor(t / 3600)} sa${dk ? ` ${dk} dk` : ""}`;
 }
 
-// Alarm bandındaki olay: çözülmemiş kritik/yüksek olaylardan en ağırı, eşitse en yenisi.
+// Alarm bandındaki olay: çözülmemiş kritik/yüksek olaylardan en ağırı; kritiklerde
+// yangın teyidi tekil alevden önce gelir; eşitse en yenisi.
 // Zaman penceresi yok; olay çözülünce bant kaybolur.
 export function bantOlayi(acikAlarmlar) {
   const bant = acikAlarmlar.filter(
     (o) => acikMi(o) && ["kritik", "yuksek"].includes(seviyeAnahtari(o.seviye))
   );
   if (bant.length === 0) return { olay: null, adet: 0 };
-  const agirlik = (o) => SEVIYELER.indexOf(seviyeAnahtari(o.seviye));
+  const agirlik = (o) =>
+    SEVIYELER.indexOf(seviyeAnahtari(o.seviye)) * 2 + (o.sensor === YANGIN_TEYIT ? 1 : 0);
   const olay = bant.reduce((en, o) =>
     agirlik(o) > agirlik(en) || (agirlik(o) === agirlik(en) && o.id > en.id) ? o : en
   );

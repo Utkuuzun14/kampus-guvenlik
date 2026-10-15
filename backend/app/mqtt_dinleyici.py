@@ -69,39 +69,67 @@ def _on_message(client, userdata, msg):
         print(f"[DB] gecmis_ekle hatası: {e}")
 
     # Kural motoruyla değerlendir
-    alarm_var, seviye, mesaj = kurallar.degerlendir(dugum, sensor, deger)
+    alarm_var, seviye, mesaj, kural = kurallar.degerlendir(dugum, sensor, deger)
 
     print(f"[OLAY] {dugum}/{sensor} deger={deger} -> {seviye}: {mesaj}")
 
-    if alarm_var:
+    if not alarm_var:
+        return
+    olay = _olay_isle(client, dugum, sensor, deger, seviye, mesaj, zaman, kural)
+    if olay is None or sensor not in ("duman", "alev"):
+        return
+
+    # Yangın teyidi: duman alarmı + alev pencere içinde → bileşik kritik olay
+    gecis = "normal" if seviye == "bilgi" else "alarm"
+    iliskili = kurallar.korelasyona_bildir(dugum, sensor, gecis, olay["id"])
+    if iliskili:
+        duman = deger if sensor == "duman" else _son_duman(dugum)
+        print(f"[KORELASYON] {dugum}: yangın teyitli, ilişkili olaylar {iliskili}")
+        _olay_isle(client, dugum, "yangin_teyit", duman, "kritik",
+                   kurallar.teyit_mesaji(dugum), zaman, "korelasyon", iliskili)
+
+
+def _son_duman(dugum):
+    """Teyit olayının değeri: düğümün son duman okuması."""
+    try:
+        son = veritabani.sensor_gecmis_getir("duman", dugum, 1)
+        return son[-1]["deger"] if son else None
+    except Exception:
+        return None
+
+
+def _olay_isle(client, dugum, sensor, deger, seviye, mesaj, zaman, kural, iliskili=None):
+    """Olayı yazar, /alarm konusuna yayınlar, WS'ye iletir, gerekirse mail atar."""
+    try:
+        olay = veritabani.olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman,
+                                    kural=kural, iliskili=iliskili)
+    except Exception as e:
+        print(f"[DB] olay_ekle hatası: {e}")
+        return None
+
+    # Alarm konusuna yayınla (backend -> .../alarm)
+    try:
+        alarm_konu = config.MQTT_ALARM_KONU_SABLON.format(dugum=dugum)
+        client.publish(alarm_konu, json.dumps({
+            "seviye": seviye, "mesaj": mesaj, "zaman": zaman
+        }), qos=1)
+    except Exception as e:
+        print(f"[MQTT] alarm yayın hatası: {e}")
+
+    # main.py bağladıysa canlı iletim (WebSocket)
+    if olay_geri_cagirma:
         try:
-            olay = veritabani.olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman)
+            olay_geri_cagirma(olay)
         except Exception as e:
-            print(f"[DB] olay_ekle hatası: {e}")
-            return
+            print(f"[WS] geri çağırma hatası: {e}")
 
-        # Alarm konusuna yayınla (backend -> .../alarm)
+    # E-posta: gönderim ayrı thread'de, dinleyici beklemez
+    if kurallar.bildirim_gerekli_mi(seviye):
         try:
-            alarm_konu = config.MQTT_ALARM_KONU_SABLON.format(dugum=dugum)
-            client.publish(alarm_konu, json.dumps({
-                "seviye": seviye, "mesaj": mesaj, "zaman": zaman
-            }), qos=1)
+            bildirim.gonder(olay)
         except Exception as e:
-            print(f"[MQTT] alarm yayın hatası: {e}")
-
-        # main.py bağladıysa canlı iletim (WebSocket)
-        if olay_geri_cagirma:
-            try:
-                olay_geri_cagirma(olay)
-            except Exception as e:
-                print(f"[WS] geri çağırma hatası: {e}")
-
-        # E-posta: gönderim ayrı thread'de, dinleyici beklemez
-        if kurallar.bildirim_gerekli_mi(seviye):
-            try:
-                bildirim.gonder(olay)
-            except Exception as e:
-                print(f"[BILDIRIM] gonder hatası: {e}")
+            print(f"[BILDIRIM] gonder hatası: {e}")
+    return olay
 
 
 def istemci_olustur():

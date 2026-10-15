@@ -1,7 +1,8 @@
-import { SEVIYE_AD, SENSOR_KISA } from "../sabitler";
+import { SEVIYE_AD, SENSOR_KISA, YANGIN_TEYIT } from "../sabitler";
 import { seviyeAnahtari, tarihSaatBicim, akistaMi } from "../hesaplar";
 import DurumRozeti from "./DurumRozeti";
 import DurumIlerlet from "./DurumIlerlet";
+import KuralRozeti from "./KuralRozeti";
 
 const FILTRELER = [
   ["hepsi", "Tümü"],
@@ -64,7 +65,7 @@ export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi, onGuncel
             {satirlar.map((o, i) => {
               const s = seviyeAnahtari(o.seviye);
               return (
-                <tr key={o.id ?? i}>
+                <tr key={o.id ?? i} className={o.sensor === YANGIN_TEYIT ? "satir-teyit" : undefined}>
                   <td className="mono soluk" title={new Date(o.zaman * 1000).toLocaleString("tr-TR")}>
                     {tarihSaatBicim(o.zaman, simdi)}
                   </td>
@@ -87,9 +88,13 @@ export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi, onGuncel
                     )}
                   </td>
                   <td className="aciklama">
-                    <button type="button" className="metin-btn" onClick={() => onDetay(o)}>
-                      {o.mesaj}
-                    </button>
+                    <div className="aciklama-ic">
+                      {o.sensor === YANGIN_TEYIT && <span className="teyit-etiket">YANGIN TEYİTLİ</span>}
+                      <KuralRozeti kural={o.kural} />
+                      <button type="button" className="metin-btn" onClick={() => onDetay(o)}>
+                        {o.mesaj}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

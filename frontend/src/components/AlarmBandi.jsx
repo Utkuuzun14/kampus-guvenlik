@@ -1,4 +1,4 @@
-import { SENSOR_AD } from "../sabitler";
+import { SENSOR_AD, YANGIN_TEYIT } from "../sabitler";
 import { cumleDuzeni, durumu, saatBicim, seviyeAnahtari } from "../hesaplar";
 import DurumRozeti from "./DurumRozeti";
 import DurumIlerlet from "./DurumIlerlet";
@@ -8,9 +8,12 @@ import DurumIlerlet from "./DurumIlerlet";
 export default function AlarmBandi({ olay, adet, konumlar, onGuncellendi, onDetay }) {
   const konum = konumlar[olay.dugum];
   const kritik = seviyeAnahtari(olay.seviye) === "kritik";
+  const teyit = olay.sensor === YANGIN_TEYIT;
+  const etiket = teyit ? "YANGIN TEYİTLİ" : `${kritik ? "KRİTİK" : "YÜKSEK"} ALARM`;
+  const deger = teyit ? `duman ${olay.deger ?? "?"} + alev` : `değer ${olay.deger}`;
 
   return (
-    <div role="alert" className="alarm-bandi">
+    <div role="alert" className={teyit ? "alarm-bandi alarm-teyit" : "alarm-bandi"}>
       <div className="tarama" />
       <div className="alarm-ikon">
         <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none"
@@ -21,7 +24,7 @@ export default function AlarmBandi({ olay, adet, konumlar, onGuncellendi, onDeta
       <div className="alarm-metin">
         <div className="alarm-ust">
           <span className={durumu(olay) === "yeni" ? "alarm-etiket yanip" : "alarm-etiket"}>
-            ● {kritik ? "KRİTİK" : "YÜKSEK"} ALARM
+            ● {etiket}
           </span>
           <span className="alarm-saat">{saatBicim(olay.zaman)}</span>
           {durumu(olay) !== "yeni" && <DurumRozeti olay={olay} />}
@@ -32,7 +35,8 @@ export default function AlarmBandi({ olay, adet, konumlar, onGuncellendi, onDeta
           {konum && ` — ${konum}`}
         </button>
         <div className="alarm-detay">
-          {olay.dugum} · {SENSOR_AD[olay.sensor] ?? olay.sensor} · değer {olay.deger}
+          {olay.dugum} · {SENSOR_AD[olay.sensor] ?? olay.sensor} · {deger}
+          {teyit && olay.iliskili?.length > 0 && ` · ${olay.iliskili.map((i) => `#${i}`).join(" + ")}`}
         </div>
       </div>
       <DurumIlerlet olay={olay} onGuncellendi={onGuncellendi} anaSinif="alarm-onay" />

@@ -4,6 +4,9 @@ Tüm ayarlar tek yerde toplanır. Gizli değerler (.env) ortam değişkeninden,
 sabit değerler doğrudan buradan okunur.
 """
 import os
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from dotenv import load_dotenv
 
 # .env dosyasını yükle (backend/.env)
@@ -32,6 +35,36 @@ ESIK_DUMAN = int(os.getenv("ESIK_DUMAN", "1800"))
 ESIK_DUMAN_NORMAL = int(os.getenv("ESIK_DUMAN_NORMAL", "1600"))
 # Bir düğümden kaç saniye haber gelmezse "çevrimdışı" sayılsın.
 CEVRIMDISI_SANIYE = int(os.getenv("CEVRIMDISI_SANIYE", "30"))
+
+# ---------------- Akıllı kurallar ----------------
+# Yangın teyidi: aynı düğümde duman alarmı ve alev bu kadar saniye içinde
+# (sıra fark etmeksizin) gelirse bileşik "yangin_teyit" olayı üretilir.
+KORELASYON_PENCERE_SN = int(os.getenv("KORELASYON_PENCERE_SN", "10"))
+
+
+def _saat_oku(ad, varsayilan):
+    """"HH:MM" -> datetime.time; hatalı biçim açılışta hata verir."""
+    metin = os.getenv(ad, varsayilan).strip()
+    try:
+        return datetime.strptime(metin, "%H:%M").time()
+    except ValueError:
+        raise ValueError(f"{ad} 'HH:MM' biçiminde olmalı, gelen: {metin!r}") from None
+
+
+# Güvenlik modu "otomatik"ken hareket kuralı sunucu saatine göre seçilir:
+# hafta içi mesai saatleri "mesai", gece aralığı (her gün) "gece", kalanı "mesai_disi".
+MESAI_BASLANGIC = _saat_oku("MESAI_BASLANGIC", "08:00")
+MESAI_BITIS = _saat_oku("MESAI_BITIS", "18:00")
+GECE_BASLANGIC = _saat_oku("GECE_BASLANGIC", "23:00")
+GECE_BITIS = _saat_oku("GECE_BITIS", "06:00")
+
+# Sunucu saat dilimi. Windows'ta IANA veritabanı (tzdata) yoksa sabit UTC+3
+# kullanılır: Türkiye 2016'dan beri yaz saati uygulamıyor, sonuç aynıdır.
+try:
+    SAAT_DILIMI = ZoneInfo("Europe/Istanbul")
+except ZoneInfoNotFoundError:
+    SAAT_DILIMI = timezone(timedelta(hours=3), "Europe/Istanbul")
+    print("[CONFIG] tzdata yok, Europe/Istanbul için sabit UTC+03:00 kullanılıyor.")
 
 # ---------------- Veritabanı ----------------
 # SQLite dosyasının yolu (backend klasöründe kampus.db)

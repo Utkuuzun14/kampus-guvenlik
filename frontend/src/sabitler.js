@@ -36,6 +36,7 @@ export const SENSOR_AD = {
   duman: "MQ-2 duman sensörü",
   alev: "Alev sensörü",
   durum: "Durum",
+  yangin_teyit: "Yangın teyidi (duman + alev)",
 };
 
 // Tablodaki kısa sensör adları
@@ -44,6 +45,29 @@ export const SENSOR_KISA = {
   duman: "MQ-2",
   alev: "Alev",
   durum: "Sistem",
+  yangin_teyit: "Teyit",
+};
+
+// Bileşik (korelasyon) olayın sensör adı
+export const YANGIN_TEYIT = "yangin_teyit";
+
+// Güvenlik modu (GET/PUT /api/ayarlar/mod). Hareket seviyesi moda göre değişir.
+export const MODLAR = ["otomatik", "mesai", "mesai_disi", "gece"];
+export const MOD_AD = {
+  otomatik: "Otomatik",
+  mesai: "Mesai",
+  mesai_disi: "Mesai dışı",
+  gece: "Gece",
+};
+
+// Olayı üreten kural (olaylar.kural). Bilinmeyen etiket olduğu gibi gösterilir.
+export const KURAL_AD = {
+  histerezis: "Histerezis",
+  gece_modu: "Gece kuralı",
+  mesai_disi: "Mesai dışı",
+  mesai: "Mesai",
+  korelasyon: "Korelasyon",
+  baglanti: "Bağlantı",
 };
 
 // Düğüm → harita konumu, açıya göre iki set. Koordinatlar o açının viewBox biriminde

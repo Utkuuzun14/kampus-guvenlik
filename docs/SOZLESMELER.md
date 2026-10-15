@@ -97,14 +97,72 @@ aşamasında güncellenebilir (yapılandırma dosyasından okunur).
 
 | Olay | Kaynak | Kural | Alarm seviyesi | Sistem tepkisi |
 |------|--------|-------|---------------|----------------|
-| Hareket | PIR | `deger == 1` | orta | Olay kaydı + panelde göster |
+| Hareket | PIR | `deger == 1` | moda göre: bilgi / orta / yuksek (aşağıda) | Olay kaydı + panelde göster (yuksek: e-posta) |
 | Duman/gaz | MQ-2 | normal → `deger > ESIK_DUMAN` (1800) geçişi | yuksek | Olay kaydı + alarm konusu + e-posta |
 | Duman normale döndü | MQ-2 | alarmda → `deger < ESIK_DUMAN_NORMAL` (1600) geçişi | bilgi | Olay kaydı |
 | Alev | KY-026 | `0 → 1` geçişi | kritik | Olay kaydı + alarm konusu + e-posta (öncelikli) |
 | Alev söndü | KY-026 | `1 → 0` geçişi | bilgi | Olay kaydı |
 | Cihaz çevrimdışı | ESP32 | `durum == "offline"` (LWT veya temiz kapanış) | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
+| Yangın teyidi | korelasyon | aynı düğümde duman alarmı + alev, `KORELASYON_PENCERE_SN` içinde | kritik | Ayrı bileşik olay + alarm konusu + e-posta ("YANGIN TEYİTLİ") |
 
 Alarm seviyeleri: `bilgi < uyari < orta < yuksek < kritik`
+
+### Kural tablosu (akıllı kurallar)
+Her olay, onu üreten kuralın etiketini `olaylar.kural` kolonunda taşır; panel
+bunu rozet olarak gösterir. Kod: `backend/app/kurallar.py`.
+
+| Sensör | Koşul | Güvenlik modu (etkin) | Seviye | `kural` |
+|--------|-------|----------------------|--------|---------|
+| hareket | `deger == 1` | mesai | bilgi (otomatik çözülür) | `mesai` |
+| hareket | `deger == 1` | mesai_disi | orta | `mesai_disi` |
+| hareket | `deger == 1` | gece | yuksek | `gece_modu` |
+| duman | normal → `> 1800` / alarmda → `< 1600` | — | yuksek / bilgi | `histerezis` |
+| alev | `0 → 1` / `1 → 0` | — | kritik / bilgi | `histerezis` |
+| durum | `offline` | — | uyari | `baglanti` |
+| yangin_teyit | duman alarmı + alev, pencere içinde | — | kritik | `korelasyon` |
+
+Eski kayıtlarda `kural` boştur (NULL); panel rozet göstermez.
+Hareket mesajı uygulanan kuralı da yazar: `Hareket algılandı · gece modu`,
+`· mesai dışı`, `· mesai saati`; otomatik modda sonuna ` (otomatik)` eklenir.
+
+### Güvenlik modu
+- Değerler (ASCII): `otomatik` | `mesai` | `mesai_disi` | `gece`. Varsayılan `otomatik`.
+- Mod kalıcıdır: `ayarlar` tablosunda `guvenlik_modu` anahtarı (§5). Backend
+  yeniden başlasa da korunur; değiştirmek için `PUT /api/ayarlar/mod` (§6.2) ya
+  da paneldeki "Güvenlik modu" seçicisi.
+- `otomatik`te etkin mod **sunucu saatine** (Europe/Istanbul) göre seçilir:
+  1. `GECE_BASLANGIC`–`GECE_BITIS` (varsayılan 23:00–06:00, her gün) → `gece`
+  2. hafta içi `MESAI_BASLANGIC`–`MESAI_BITIS` (varsayılan 08:00–18:00) → `mesai`
+  3. geri kalanı ve hafta sonu gündüzü → `mesai_disi`
+
+  Başlangıç saati dahil, bitiş hariç. Gece ve mesai çakışırsa gece kazanır.
+  Saatler `.env`'den okunur (`HH:MM`).
+- **Neden sunucu saati:** olayın `zaman` alanı cihaz saatidir ve kayabilir
+  (NTP yoksa saatler/dakikalar); bir ESP32'nin saati yüzünden gece alarmı mesai
+  sayılmasın diye mod kararı daima sunucu saatiyle verilir.
+- Windows'ta IANA saat dilimi veritabanı (`tzdata`) yoksa sabit UTC+03:00
+  kullanılır; Türkiye 2016'dan beri yaz saati uygulamadığı için sonuç aynıdır.
+- Kural fonksiyonu saftır: `hareket_seviyesi(mod, simdi)` saat parametreyle
+  verildiği için testte herhangi bir an denenebilir (T11).
+
+### Yangın teyidi (korelasyon)
+- **Tanım:** aynı düğümde duman **alarm durumuna geçişi** (histerezisle
+  `> 1800`) ve **alev=1 olayı** (`0 → 1`), sıra fark etmeksizin
+  `KORELASYON_PENCERE_SN` (varsayılan 10 sn, `.env`) içinde gerçekleşirse
+  ayrı bir bileşik olay üretilir:
+  `sensor="yangin_teyit"`, `seviye="kritik"`, `kural="korelasyon"`,
+  `mesaj="Yangın teyitli: duman + alev (<düğüm konumu>)"`,
+  `deger` = tetikleyen duman değeri, `iliskili=[ilk_olay_id, ikinci_olay_id]`.
+- Orijinal duman ve alev olayları aynen kalır; teyit onlara ek bir olaydır.
+- **Tekrar yok:** teyitten sonra düğüm kilitlenir. Duman normale (`< 1600`)
+  dönüp alev 0 olana kadar (ikisi de normal) yeni teyit üretilmez; yangın
+  sürerken alevin söndüp yeniden yanması da teyit üretmez.
+- Pencere, mesajların **sunucuya varış zamanıyla** ölçülür (cihaz saati değil).
+- Korelasyon durumu histerezis gibi backend belleğinde tutulur; backend yeniden
+  başlarsa sıfırlanır.
+- Teyit olayı normal akışa girer: durum `yeni` (operatör akışı), WS `olay`
+  mesajı, `.../alarm` konusu ve kritik e-posta. Bildirim bekleme anahtarı
+  `(düğüm, "yangin_teyit", "kritik")` olduğundan alev mailiyle çakışmaz.
 
 ### Histerezis (alarm fırtınası önleme)
 - Duman ve alev için olay yalnızca **durum değişiminde** üretilir. Duman 1800'ü
@@ -145,8 +203,12 @@ Her anlamlı olay (alarm dahil) buraya bir satır olarak yazılır.
 | `mudahale_zaman` | REAL NULL | sunucu saati |
 | `cozuldu_zaman` | REAL NULL | sunucu saati |
 | `not_metni` | TEXT NULL | son adımın notu |
+| `kural` | TEXT NULL | olayı üreten kural (§4 kural tablosu): `histerezis`, `mesai`, `mesai_disi`, `gece_modu`, `korelasyon`, `baglanti` |
+| `iliskili` | TEXT NULL | bileşik olayı tetikleyen olay id'leri, JSON liste (ör. `"[412, 413]"`); API'de dizi olarak döner |
 
-Durum kolonları kayıpsız göçle eklenir: backend açılışta `PRAGMA table_info`
+`sensor` alanı bileşik olayda `yangin_teyit` olur (§4).
+
+Durum, `kural` ve `iliskili` kolonları kayıpsız göçle eklenir: backend açılışta `PRAGMA table_info`
 ile eksik kolonları bulur ve yalnızca onları `ALTER TABLE ADD COLUMN` ile ekler
 (tablo silinmez, idempotent). Kolonlar ilk kez eklendiğinde mevcut kayıtlar bir
 kez kapatılır: `bilgi`/`uyari` → `cozuldu` (`onaylayan='sistem'`), `orta+` →
@@ -167,6 +229,15 @@ Her durum geçişi bir satır; zaman çizelgesindeki kim + not + saat buradan ge
 
 Ara adım atlanırsa (ör. `yeni → cozuldu`) yalnızca hedef adım için satır yazılır;
 atlanan adımın `*_zaman` alanı aynı anla dolar, panel onu "atlandı" gösterir.
+
+### Tablo: `ayarlar`
+Kalıcı sistem ayarları (anahtar–değer). Tablo yoksa açılışta oluşturulur;
+mevcut veriye dokunulmaz. `scripts/db_sifirla.py` bu tabloyu boşaltmaz.
+
+| Sütun | Tip | Açıklama |
+|-------|-----|----------|
+| `anahtar` | TEXT PK | ör. `guvenlik_modu` |
+| `deger` | TEXT | ör. `otomatik` |
 
 ### Tablo: `sensor_gecmis`
 Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için faydalı.
@@ -189,6 +260,7 @@ Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için f
 - `GET /api/olaylar/{id}` → tek olay + `adimlar` dizisi (eski → yeni); yoksa 404
 - `PATCH /api/olaylar/{id}/durum` → durum ilerletme (§6.1)
 - `GET /api/istatistik/mudahale` → müdahale istatistiği (§6.1)
+- `GET /api/ayarlar/mod`, `PUT /api/ayarlar/mod` → güvenlik modu (§6.2)
 - `GET /api/durum` → dugum1 durumu ve duman eşiği (`esik_duman`); eski uç, geriye uyumluluk için
 - `GET /api/dugumler` → bilinen tüm düğümler (aşağıda)
 - `GET /api/gecmis?sensor=duman&dugum=dugum1&limit=50` → bir sensörün son ham okumaları (eski → yeni)
@@ -227,7 +299,8 @@ WebSocket mesaj formatı:
 { "tip": "olay", "veri": { ...olay nesnesi... } }
 ```
 Olay nesnesine durum alanları (`durum`, `onaylayan`, `*_zaman`, `not_metni`)
-**eklendi**; `tip` ve mevcut alanlar aynı kaldı, eski istemciler etkilenmez.
+ve kural alanları (`kural`, `iliskili`) **eklendi**; `tip` ve mevcut alanlar
+aynı kaldı, eski istemciler etkilenmez.
 
 Durum değiştiğinde (§6.1) tüm bağlı istemcilere:
 ```json
@@ -235,6 +308,13 @@ Durum değiştiğinde (§6.1) tüm bağlı istemcilere:
 ```
 Panel, listelerdeki olayı `id` ile bulup yerinde günceller (sayfa yenilemeden,
 açık tüm sekmelerde).
+
+Güvenlik modu değiştiğinde (`PUT /api/ayarlar/mod`) ya da otomatik modda etkin
+mod saatle değiştiğinde (backend 30 sn'de bir kontrol eder, ör. 23:00'te gece
+başlar) tüm bağlı istemcilere:
+```json
+{ "tip": "mod", "veri": { "mod": "otomatik", "etkin_mod": "gece", "aciklama": "..." } }
+```
 
 ### 6.1 Olay yaşam döngüsü (alarm onaylama)
 
@@ -292,6 +372,27 @@ Başarılı geçişten sonra `olay_guncelleme` WS mesajı yayınlanır.
 > için bu durum yalnızca gerçek donanımda görülebilir; firmware'de NTP ile saat
 > eşitlemesi önerilir.
 
+### 6.2 Güvenlik modu uçları
+
+**`GET /api/ayarlar/mod`**
+```json
+{ "mod": "otomatik", "etkin_mod": "gece",
+  "aciklama": "Otomatik · şu an gece (23:00–06:00) · hareket = yuksek" }
+```
+- `mod`: kayıtlı mod; `etkin_mod`: o an geçerli olan (otomatikte saate göre,
+  diğerlerinde `mod` ile aynı); `aciklama`: panel ipucu için kısa metin.
+
+**`PUT /api/ayarlar/mod`**
+```json
+{ "mod": "gece" }
+```
+| Kod | Ne zaman | Gövde |
+|-----|----------|-------|
+| 200 | kaydedildi | GET ile aynı biçim |
+| 422 | `mod` eksik ya da `otomatik/mesai/mesai_disi/gece` dışında | FastAPI doğrulama hatası |
+
+Değer değiştiyse WS `{"tip": "mod"}` yayınlanır; aynı değer tekrar gönderilirse yayın yok.
+
 ---
 
 ## 7. Güvenlik kararları
@@ -308,7 +409,8 @@ Başarılı geçişten sonra `olay_guncelleme` WS mesajı yayınlanır.
 Kod: `backend/app/bildirim.py`, ayarlar: `backend/.env` (şablon: `backend/.env.example`).
 
 - **Hangi olaylar:** seviyesi `BILDIRIM_SEVIYELER` içinde olanlar (varsayılan
-  `kritik,yuksek`, yani alev ve duman eşik aşımı). Olay DB'ye yazıldıktan sonra tetiklenir.
+  `kritik,yuksek`: alev, yangın teyidi, duman eşik aşımı ve gece modunda hareket).
+  Olay DB'ye yazıldıktan sonra tetiklenir.
 - **Spam önleme:** aynı `(düğüm, sensör, seviye)` için `BILDIRIM_BEKLEME_SN`
   (varsayılan 300 sn) içinde ikinci mail gitmez. Bu sürede bastırılan olay
   sayısı bir sonraki mailde "Son 5 dk'da +N benzer olay" olarak yazılır.
@@ -320,7 +422,9 @@ Kod: `backend/app/bildirim.py`, ayarlar: `backend/.env` (şablon: `backend/.env.
   denenmez; bekleme süresi denemeyle başladığı için her olayda yeniden denenmez.
 - **Hariç düğüm:** `test_dugum` (canlı test senaryoları) mail üretmez.
 - **Gönderim:** SMTP SSL (465), UTF-8, HTML + düz metin. Konu biçimi:
-  `[KRİTİK] Alev algılandı — dugum1 (Ana Bina · A Kanadı)`.
+  `[KRİTİK] Alev algılandı — dugum1 (Ana Bina · A Kanadı)`; yangın teyidinde
+  `[KRİTİK] YANGIN TEYİTLİ — dugum1 (Ana Bina · A Kanadı)`. Olayda `kural` varsa
+  mailde "Kural" satırı, bileşik olayda "İlişkili" satırı (`#412, #413`) yer alır.
   Düğüm konumları `config.DUGUM_KONUMLARI`'ndan gelir (frontend `sabitler.js` ile aynı tutulur).
 - **Gizlilik:** parola ve adresler yalnızca `backend/.env`'de durur (git'e girmez).
   Gmail için normal parola değil, 16 haneli **uygulama şifresi** kullanılır.

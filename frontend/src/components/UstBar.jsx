@@ -1,4 +1,5 @@
-import { KURUM } from "../sabitler";
+import { useId } from "react";
+import { KURUM, MODLAR, MOD_AD } from "../sabitler";
 
 const BAGLANTI = {
   canli: { metin: "Canlı", durum: "canli" },
@@ -6,8 +7,40 @@ const BAGLANTI = {
   baglaniyor: { metin: "Bağlanıyor…", durum: "uyari" },
 };
 
+// Güvenlik modu seçici. Otomatikte o an geçerli mod yanında gösterilir;
+// etkin mod gece ise kutu uyarı rengiyle vurgulanır.
+function ModSecici({ mod }) {
+  const id = useId();
+  const bilgi = mod.bilgi;
+  const gece = bilgi?.etkin_mod === "gece";
+  return (
+    <div className={gece ? "mod-kutu mod-gece" : "mod-kutu"} title={mod.hata ?? bilgi?.aciklama}>
+      <label htmlFor={id} className="tehdit-etiket">Güvenlik modu</label>
+      <div className="mod-satir">
+        <select
+          id={id}
+          className="mod-secim"
+          value={bilgi?.mod ?? ""}
+          disabled={!bilgi || mod.kaydediliyor}
+          onChange={(e) => mod.degistir(e.target.value)}
+        >
+          {!bilgi && <option value="">—</option>}
+          {MODLAR.map((m) => (
+            <option key={m} value={m}>{MOD_AD[m]}</option>
+          ))}
+        </select>
+        {bilgi?.mod === "otomatik" && (
+          <span className="mod-etkin">şu an: {MOD_AD[bilgi.etkin_mod] ?? bilgi.etkin_mod}</span>
+        )}
+      </div>
+      {mod.hata && <span className="isik-not" role="status">{mod.hata}</span>}
+    </div>
+  );
+}
+
 // isiklar: [{ ad, durum: "ok" | "uyari" | "hata" | "bekliyor", not?, ipucu? }]
-export default function UstBar({ simdi, tehdit, isiklar, baglanti }) {
+// mod: useGuvenlikModu() sonucu
+export default function UstBar({ simdi, tehdit, isiklar, baglanti, mod }) {
   const saat = simdi.toLocaleTimeString("tr-TR", {
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
@@ -28,6 +61,8 @@ export default function UstBar({ simdi, tehdit, isiklar, baglanti }) {
           <span className="tehdit-etiket">Tehdit seviyesi</span>
           <span className="tehdit-metin">{tehdit.metin}</span>
         </div>
+
+        <ModSecici mod={mod} />
 
         <div className="isiklar">
           {isiklar.map((i) => (

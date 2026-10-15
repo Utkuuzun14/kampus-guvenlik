@@ -7,8 +7,9 @@ kontrol konusu kampus/demo/<dugum>/senaryo), böylece paneldeki değerler
 karışmaz. Üreteç çalışmıyorsa yangın ve hareket senaryoları yine çalışır.
 
 Çalıştırma (backend venv aktifken, proje kökünden):
-    python scripts/senaryo.py yangin dugum1    # duman yükselir → alev (kritik) → normale döner
-    python scripts/senaryo.py hareket dugum2   # gece izinsiz giriş: art arda hareket
+    python scripts/senaryo.py yangin dugum1    # duman eşiği aşar → 3 sn sonra alev → YANGIN TEYİTLİ
+    python scripts/senaryo.py hareket dugum2   # izinsiz giriş: art arda hareket (seviye moda göre)
+    python scripts/senaryo.py hareket dugum2 --mod gece   # modu gece yapar (yüksek), sonra geri alır
     python scripts/senaryo.py kopma dugum3     # LWT ile düşer, 30 sn sonra geri gelir
 """
 import argparse
@@ -18,6 +19,8 @@ import random
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 
 import paho.mqtt.client as mqtt
 
@@ -27,6 +30,18 @@ from app import config  # noqa: E402
 import sahte_veri as sv  # noqa: E402
 
 ADIM = sv.YAYIN_ARALIGI  # 3 sn, üreteçle aynı ölçüm aralığı
+API = "http://127.0.0.1:8000"
+MODLAR = ("otomatik", "mesai", "mesai_disi", "gece")
+
+
+def mod_istek(mod=None):
+    """mod=None: GET, verilirse PUT /api/ayarlar/mod. Yanıt gövdesi (dict)."""
+    veri = None if mod is None else json.dumps({"mod": mod}).encode("utf-8")
+    istek = urllib.request.Request(f"{API}/api/ayarlar/mod", data=veri,
+                                   method="GET" if mod is None else "PUT",
+                                   headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(istek, timeout=5) as r:
+        return json.loads(r.read().decode("utf-8"))
 
 
 def baglan():
@@ -63,15 +78,20 @@ def olcum(client, dugum, duman, hareket=0, alev=0):
 
 def yangin(client, dugum):
     print(f"[yangın] {dugum}: duman 30 sn'de yükselip eşiği ({config.ESIK_DUMAN}) aşacak, "
-          f"ardından alev; 60 sn sonra normale dönecek.")
+          f"{ADIM} sn sonra alev (korelasyon penceresi {config.KORELASYON_PENCERE_SN} sn → "
+          f"YANGIN TEYİTLİ); 60 sn sonra normale dönecek.")
     kontrol(client, dugum, "duraklat", sure=150)
     try:
-        # 1) 30 sn kademeli yükseliş: 10 ölçüm, ~450 → ~2600
-        for i in range(10):
-            olcum(client, dugum, int(450 + i * 240 + random.randint(-40, 40)))
+        # 1) 30 sn kademeli yükseliş: 10 ölçüm, ~450 → ~2600. İlk 9 ölçüm eşiğin
+        #    altında kalır, eşik SON ölçümde aşılır; alev bir adım (3 sn) sonra
+        #    geldiği için korelasyon penceresine rahatça girer.
+        tavan = config.ESIK_DUMAN - 150
+        for i in range(9):
+            olcum(client, dugum, min(int(450 + i * 145 + random.randint(-40, 40)), tavan))
+        olcum(client, dugum, config.ESIK_DUMAN + random.randint(600, 900))
         # 2) Alev (kritik) + 60 sn yüksek duman. alev=1 bir kez yayınlanır
         #    (tek kritik olay); panelde son ölçüm söndürülene kadar "VAR" kalır.
-        print("  ALEV ALGILANDI (kritik)", flush=True)
+        print("  ALEV ALGILANDI (kritik) → yangın teyidi bekleniyor", flush=True)
         for i in range(60 // ADIM):
             olcum(client, dugum, random.randint(2700, 3200), alev=1 if i == 0 else None)
         # 3) Normale dönüş
@@ -83,7 +103,8 @@ def yangin(client, dugum):
 
 
 def hareket(client, dugum):
-    print(f"[izinsiz giriş] {dugum}: gece saatlerinde art arda hareket algılanacak.")
+    print(f"[izinsiz giriş] {dugum}: art arda hareket algılanacak "
+          f"(seviye güvenlik moduna göre: mesai bilgi, mesai dışı orta, gece yüksek).")
     kontrol(client, dugum, "duraklat", sure=60)
     try:
         for _ in range(8):
@@ -124,7 +145,21 @@ def main():
     ap.add_argument("senaryo", choices=["yangin", "hareket", "kopma"])
     ap.add_argument("dugum", help="ör. dugum1")
     ap.add_argument("--sure", type=int, default=30, help="kopma süresi (sn, varsayılan 30)")
+    ap.add_argument("--mod", choices=MODLAR,
+                    help="hareket: senaryo süresince güvenlik modu (sonunda eski moda döner)")
     arg = ap.parse_args()
+    if arg.mod and arg.senaryo != "hareket":
+        ap.error("--mod yalnızca hareket senaryosunda kullanılır")
+
+    onceki_mod = None
+    if arg.mod:
+        try:
+            onceki_mod = mod_istek()["mod"]
+            bilgi = mod_istek(arg.mod)
+        except (urllib.error.URLError, OSError) as e:
+            print(f"[senaryo] Güvenlik modu ayarlanamadı ({e}). Backend çalışıyor mu?")
+            return 1
+        print(f"[senaryo] Güvenlik modu: {onceki_mod} → {arg.mod} ({bilgi['aciklama']})")
 
     client = baglan()
     try:
@@ -142,6 +177,12 @@ def main():
     finally:
         client.disconnect()
         client.loop_stop()
+        if onceki_mod:
+            try:
+                mod_istek(onceki_mod)
+                print(f"[senaryo] Güvenlik modu geri alındı: {onceki_mod}")
+            except (urllib.error.URLError, OSError) as e:
+                print(f"[senaryo] Mod geri alınamadı ({e}); panelden {onceki_mod} seçin.")
     if sonuc == 0:
         print("[senaryo] tamamlandı.")
     return sonuc

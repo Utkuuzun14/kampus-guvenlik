@@ -1,7 +1,8 @@
 """
 Veritabanı modülü (SQLite).
-Sözleşmedeki tabloları yönetir: olaylar, olay_adimlari ve sensor_gecmis.
+Sözleşmedeki tabloları yönetir: olaylar, olay_adimlari, sensor_gecmis ve ayarlar.
 """
+import json
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -23,6 +24,8 @@ _YENI_KOLONLAR = [
     ("mudahale_zaman", "REAL"),
     ("cozuldu_zaman", "REAL"),
     ("not_metni", "TEXT"),
+    ("kural", "TEXT"),      # olayı üreten kural: histerezis, gece_modu, korelasyon...
+    ("iliskili", "TEXT"),   # bileşik olayın tetikleyen olay id'leri, JSON liste "[412, 413]"
 ]
 
 _AKIS_YER = ",".join("?" * len(AKIS_SEVIYELERI))  # SQL IN (...) yer tutucuları
@@ -68,6 +71,13 @@ def kur():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_adimlar_olay ON olay_adimlari (olay_id, id)")
         _olaylar_gocu(conn)
+        # Kalıcı ayarlar (ör. guvenlik_modu); yeni tablo, mevcut veriye dokunmaz
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ayarlar (
+                anahtar TEXT PRIMARY KEY,
+                deger TEXT
+            )
+        """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sensor_gecmis (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,8 +129,22 @@ def _olaylar_gocu(conn):
           f"{len(orta_idler)} orta+ kayıt çözüldü olarak işaretlendi.")
 
 
-def olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman=None):
-    """olaylar tablosuna bir kayıt ekler ve eklenen kaydı (dict) döndürür."""
+def _olay_dict(satir):
+    """DB satırı -> API sözlüğü. iliskili DB'de JSON metin, API'de liste."""
+    olay = dict(satir)
+    metin = olay.get("iliskili")
+    try:
+        olay["iliskili"] = json.loads(metin) if metin else None
+    except ValueError:
+        olay["iliskili"] = None
+    return olay
+
+
+def olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman=None, kural=None, iliskili=None):
+    """
+    olaylar tablosuna bir kayıt ekler ve eklenen kaydı (dict) döndürür.
+    kural: olayı üreten kural etiketi; iliskili: tetikleyen olay id'leri (liste).
+    """
     if not zaman:
         zaman = int(time.time())
     # bilgi/uyari operatör akışına girmez: oluşurken çözülmüş sayılır
@@ -131,10 +155,11 @@ def olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman=None):
     with baglanti() as conn:
         cur = conn.execute(
             "INSERT INTO olaylar (dugum, sensor, deger, seviye, mesaj, zaman, "
-            "durum, onaylayan, goruldu_zaman, mudahale_zaman, cozuldu_zaman) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "durum, onaylayan, goruldu_zaman, mudahale_zaman, cozuldu_zaman, kural, iliskili) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (dugum, sensor, deger, seviye, mesaj, zaman,
-             durum, onaylayan, kapanis, kapanis, kapanis),
+             durum, onaylayan, kapanis, kapanis, kapanis,
+             kural, json.dumps(iliskili) if iliskili else None),
         )
         yeni_id = cur.lastrowid
     return {
@@ -142,6 +167,7 @@ def olay_ekle(dugum, sensor, deger, seviye, mesaj, zaman=None):
         "seviye": seviye, "mesaj": mesaj, "zaman": zaman,
         "durum": durum, "onaylayan": onaylayan, "goruldu_zaman": kapanis,
         "mudahale_zaman": kapanis, "cozuldu_zaman": kapanis, "not_metni": None,
+        "kural": kural, "iliskili": list(iliskili) if iliskili else None,
     }
 
 
@@ -155,7 +181,7 @@ def olay_getir(olay_id):
             "SELECT durum, kim, not_metni, zaman FROM olay_adimlari "
             "WHERE olay_id = ? ORDER BY id", (olay_id,)
         ).fetchall()
-    olay = dict(satir)
+    olay = _olay_dict(satir)
     olay["adimlar"] = [dict(a) for a in adimlar]
     return olay
 
@@ -251,7 +277,7 @@ def son_olaylar(limit=50, sadece_acik=False):
         satirlar = conn.execute(
             f"SELECT * FROM olaylar {kosul}ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-    return [dict(s) for s in satirlar]
+    return [_olay_dict(s) for s in satirlar]
 
 
 def sensor_gecmis_getir(sensor, dugum="dugum1", limit=50):
@@ -275,3 +301,20 @@ def son_okumalar():
             ") s ON g.id = s.id"
         ).fetchall()
     return [dict(s) for s in satirlar]
+
+
+def ayar_getir(anahtar, varsayilan=None):
+    """ayarlar tablosundan bir değer; yoksa varsayilan."""
+    with baglanti() as conn:
+        satir = conn.execute("SELECT deger FROM ayarlar WHERE anahtar = ?", (anahtar,)).fetchone()
+    return satir["deger"] if satir else varsayilan
+
+
+def ayar_yaz(anahtar, deger):
+    """Ayarı ekler ya da günceller."""
+    with baglanti() as conn:
+        conn.execute(
+            "INSERT INTO ayarlar (anahtar, deger) VALUES (?, ?) "
+            "ON CONFLICT(anahtar) DO UPDATE SET deger = excluded.deger",
+            (anahtar, deger),
+        )

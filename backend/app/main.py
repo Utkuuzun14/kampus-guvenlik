@@ -2,8 +2,10 @@
 FastAPI ana uygulaması.
 - Açılışta veritabanını kurar ve MQTT dinleyiciyi arka planda başlatır.
 - REST uçları: /api/olaylar, /api/olaylar/{id}, PATCH /api/olaylar/{id}/durum,
-  /api/istatistik/mudahale, /api/durum, /api/dugumler, /api/gecmis, /api/saglik
-- WebSocket /ws: yeni olayları ve durum güncellemelerini bağlı istemcilere canlı iletir.
+  /api/istatistik/mudahale, /api/durum, /api/dugumler, /api/gecmis, /api/saglik,
+  GET/PUT /api/ayarlar/mod (güvenlik modu)
+- WebSocket /ws: yeni olayları, durum güncellemelerini ve güvenlik modu
+  değişikliklerini bağlı istemcilere canlı iletir.
 """
 import asyncio
 import json
@@ -16,7 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StringConstraints
 
-from app import config, veritabani, mqtt_dinleyici
+from app import config, kurallar, veritabani, mqtt_dinleyici
+
+# Otomatik modda etkin mod (mesai/gece) saat ilerledikçe değişir; bu aralıkla
+# kontrol edilip değişince WS "mod" mesajı yayınlanır.
+MOD_KONTROL_SN = 30
 
 
 class BaglantiYoneticisi:
@@ -53,6 +59,20 @@ def _olay_geldi(olay: dict):
     asyncio.run_coroutine_threadsafe(yonetici.yayinla(mesaj), _ana_dongu)
 
 
+async def _mod_izle():
+    """Etkin mod değişince (ör. 23:00'te gece başlar) tüm sekmelere bildirir."""
+    onceki = None
+    while True:
+        try:
+            bilgi = kurallar.mod_bilgisi()
+            if onceki is not None and bilgi["etkin_mod"] != onceki:
+                await yonetici.yayinla({"tip": "mod", "veri": bilgi})
+            onceki = bilgi["etkin_mod"]
+        except Exception as e:
+            print(f"[MOD] izleme hatası: {e}")
+        await asyncio.sleep(MOD_KONTROL_SN)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _ana_dongu
@@ -60,8 +80,10 @@ async def lifespan(app: FastAPI):
     veritabani.kur()
     mqtt_dinleyici.olay_geri_cagirma = _olay_geldi
     client = mqtt_dinleyici.baslat_arka_planda()
+    izleyici = asyncio.create_task(_mod_izle())
     print("[APP] Backend hazir: MQTT dinleyici + API calisiyor.")
     yield
+    izleyici.cancel()
     try:
         client.disconnect()
     except Exception:
@@ -123,6 +145,28 @@ async def olay_durum(olay_id: int, istek: DurumIstegi):
         })
     await yonetici.yayinla({"tip": "olay_guncelleme", "veri": veri})
     return veri
+
+
+class ModIstegi(BaseModel):
+    mod: Literal["otomatik", "mesai", "mesai_disi", "gece"]
+
+
+@app.get("/api/ayarlar/mod")
+def mod_getir():
+    """{mod, etkin_mod, aciklama}; etkin_mod otomatikte o an geçerli olan mod."""
+    return kurallar.mod_bilgisi()
+
+
+@app.put("/api/ayarlar/mod")
+async def mod_ayarla(istek: ModIstegi):
+    """Güvenlik modunu kalıcı olarak değiştirir. 422: geçersiz mod."""
+    onceki = kurallar.mod_getir()
+    veritabani.ayar_yaz(kurallar.MOD_ANAHTAR, istek.mod)
+    bilgi = kurallar.mod_bilgisi(istek.mod)
+    if istek.mod != onceki:
+        print(f"[MOD] Güvenlik modu: {onceki} -> {istek.mod} ({bilgi['aciklama']})")
+        await yonetici.yayinla({"tip": "mod", "veri": bilgi})
+    return bilgi
 
 
 @app.get("/api/istatistik/mudahale")
