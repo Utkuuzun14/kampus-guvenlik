@@ -4,8 +4,9 @@ Veritabanı sıfırlama aracı (sunum öncesi temiz başlangıç).
 1. backend/kampus.db'nin yedeğini alır: backend/yedekler/kampus_YYYYMMDD_HHMM.db
    (SQLite yedekleme API'si; backend açıkken de tutarlı bir kopya üretir)
 2. Tablo başına kayıt sayılarını gösterir, "EVET" yazılmasını ister
-3. olaylar, olay_adimlari ve sensor_gecmis tablolarını boşaltır, id sayaçlarını sıfırlar,
-   VACUUM yapar. Tablo yapısına (sütunlar, indeksler) dokunmaz.
+3. olaylar, olay_adimlari, sensor_gecmis ve giris_kayitlari tablolarını boşaltır, id
+   sayaçlarını sıfırlar, VACUUM yapar. Tablo yapısına (sütunlar, indeksler) dokunmaz.
+   kullanicilar ve ayarlar tabloları KORUNUR (hesaplar ve güvenlik modu silinmez).
 
 Backend açıkken de çalıştırılabilir: veritabanı o an kilitliyse birkaç kez
 bekleyip tekrar dener, olmazsa anlaşılır bir hata verir. Backend'in bellekteki
@@ -27,8 +28,9 @@ BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", 
 sys.path.insert(0, BACKEND_DIZINI)
 from app import config  # noqa: E402
 
-# olay_adimlari eski veritabanında henüz olmayabilir (backend açılışta oluşturur)
-TABLOLAR = ("olaylar", "olay_adimlari", "sensor_gecmis")
+# olay_adimlari / giris_kayitlari eski veritabanında henüz olmayabilir (backend açılışta oluşturur)
+TABLOLAR = ("olaylar", "olay_adimlari", "sensor_gecmis", "giris_kayitlari")
+KORUNAN = "kullanicilar"  # hiçbir zaman silinmez
 DENEME = 5          # kilitliyse kaç kez denensin
 BEKLEME_SN = 2      # denemeler arası bekleme
 KILIT_SURESI = 5    # her bağlantının kilidi bekleme süresi (sqlite3 timeout)
@@ -73,6 +75,14 @@ def mevcut_tablolar(conn):
 def sayilar(conn):
     return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             for t in mevcut_tablolar(conn)}
+
+
+def korunan_sayisi(conn):
+    """kullanicilar tablosundaki kayıt sayısı (tablo yoksa 0)."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        (KORUNAN,)).fetchone():
+        return 0
+    return conn.execute(f"SELECT COUNT(*) FROM {KORUNAN}").fetchone()[0]
 
 
 def yedek_al(yol):
@@ -125,7 +135,8 @@ def bosalt(yol):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="olaylar, olay_adimlari ve sensor_gecmis tablolarını yedekleyip boşaltır")
+    ap = argparse.ArgumentParser(description="olaylar, olay_adimlari, sensor_gecmis ve giris_kayitlari "
+                                             "tablolarını yedekleyip boşaltır (kullanicilar korunur)")
     ap.add_argument("--evet", action="store_true", help="onay sormadan çalış")
     arg = ap.parse_args()
 
@@ -138,18 +149,21 @@ def main():
         conn = baglan(yol)
         try:
             once = tekrar_dene("sayım", lambda: sayilar(conn))
+            korunan = tekrar_dene("sayım", lambda: korunan_sayisi(conn))
         finally:
             conn.close()
         boyut = os.path.getsize(yol)
         print(f"Veritabanı: {yol} ({boyut / 1024 / 1024:.1f} MB)")
         for t, n in once.items():
-            print(f"  {t:14} {n:>8} kayıt")
+            print(f"  {t:15} {n:>8} kayıt")
+        print(f"{KORUNAN} tablosu KORUNUR ({korunan} kullanıcı) — silinmez.")
 
         yedek = yedek_al(yol)
         print(f"Yedek alındı: {yedek} ({os.path.getsize(yedek) / 1024 / 1024:.1f} MB)")
 
         if not arg.evet:
-            cevap = input('Tüm kayıtlar silinecek (tablo yapısı korunur). Onaylıyorsanız "EVET" yazın: ')
+            cevap = input("Yukarıdaki tabloların tüm kayıtları silinecek (tablo yapısı ve kullanıcılar "
+                          'korunur). Onaylıyorsanız "EVET" yazın: ')
             if cevap.strip() != "EVET":
                 print("İptal edildi. Veritabanı değiştirilmedi (yedek duruyor).")
                 return 1
@@ -167,6 +181,7 @@ def main():
 
     print("✓ Sıfırlandı: " + ", ".join(f"{t} {n}" for t, n in sonra.items())
           + f" kayıt; dosya {os.path.getsize(yol) / 1024 / 1024:.1f} MB")
+    print(f"  {KORUNAN}: {korunan} kullanıcı korundu.")
     print("İpucu: backend açıksa yeniden başlatın (bellekteki alarm durumu da sıfırlansın).")
     return 0
 

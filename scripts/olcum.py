@@ -12,6 +12,8 @@ bitince bu çalıştırmada oluşan test_dugum kayıtlarını siler.
   5. Mesaj kaybı: QoS 1 ile 500 ölçüm → kaçı sensor_gecmis'e yazıldı
 
 Çalıştırmadan önce: broker + backend açık, sahte üreteç KAPALI.
+API korumalı olduğundan ölçüm boyunca geçici bir operatör kullanılır
+(test_senaryolari.gecici_kullanicilar); bitince kullanıcı ve giriş kayıtları silinir.
 
 Çalıştırma (backend venv aktifken, proje kökünden):
     python scripts/olcum.py                    # sonuçları markdown olarak yazar
@@ -31,7 +33,6 @@ import subprocess
 import sys
 import threading
 import time
-import urllib.request
 from datetime import datetime
 
 import paho.mqtt.client as mqtt
@@ -43,8 +44,6 @@ import sahte_veri as sv  # noqa: E402  (LWT'li client ve kopma fonksiyonu)
 from app import config  # noqa: E402
 
 DUGUM = ts.DUGUM  # "test_dugum"
-API = ts.API
-WS_URL = "ws://127.0.0.1:8000/ws"
 DB_YOKLAMA_SN = 0.002   # olay tablosunu yoklama aralığı (ölçüm çözünürlüğü)
 API_YOKLAMA_SN = 0.01
 
@@ -71,7 +70,7 @@ def yayinla(client, sensor, deger):
 
 async def _uctan_uca(client, tekrar):
     sureler, kayip = [], 0
-    async with websockets.connect(WS_URL) as ws:
+    async with websockets.connect(ts.ws_adresi()) as ws:
         await asyncio.sleep(0.5)
         for _ in range(tekrar):
             t0 = time.perf_counter()
@@ -147,8 +146,7 @@ def olc_olay_uretim(client, tekrar=20):
 # ---------------- 3. LWT tespit ----------------
 
 def api_dugum():
-    with urllib.request.urlopen(f"{API}/api/dugumler", timeout=5) as r:
-        return next((d for d in json.loads(r.read().decode("utf-8")) if d["id"] == DUGUM), None)
+    return ts.dugum_durumu()
 
 
 def api_bekle(kosul, sure=10.0):
@@ -376,26 +374,29 @@ def main():
 
     sonuc = {"ortam": ortam_bilgisi()}
     baslangic = ts.son_kayit_idleri()
-    client = ts.mqtt_baglan()
-    try:
-        time.sleep(1)
-        ts.normale_cek(client)
-        sonuc["uctan_uca"] = olc_uctan_uca(client)
-        sonuc["olay"] = olc_olay_uretim(client)
-        sonuc["lwt"] = olc_lwt()
-        sonuc["kayip"] = olc_mesaj_kaybi(client)
-        if not arg.eposta_yok:
-            sonuc["eposta"] = olc_eposta()
-    finally:
-        client.loop_stop()
-        client.disconnect()
-        time.sleep(1)  # son mesajlar yazılsın
-        ts.test_verisini_temizle(baslangic)
-        with sqlite3.connect(ts.db_yolu()) as db:
-            kalan = {t: db.execute(f"SELECT COUNT(*) FROM {t} WHERE dugum = ?", (DUGUM,)).fetchone()[0]
-                     for t in ts.TABLOLAR}
-        print(f"Doğrulama: veritabanında kalan {DUGUM} kaydı: {kalan}")
-        sonuc["temizlik_sonrasi_kalan"] = kalan
+    with ts.gecici_kullanicilar("operator") as oturum:
+        ts.TOKEN = oturum["operator"]["token"]  # /api/dugumler ve /ws için
+        client = ts.mqtt_baglan()
+        try:
+            time.sleep(1)
+            ts.normale_cek(client)
+            sonuc["uctan_uca"] = olc_uctan_uca(client)
+            sonuc["olay"] = olc_olay_uretim(client)
+            sonuc["lwt"] = olc_lwt()
+            sonuc["kayip"] = olc_mesaj_kaybi(client)
+            if not arg.eposta_yok:
+                sonuc["eposta"] = olc_eposta()
+        finally:
+            client.loop_stop()
+            client.disconnect()
+            time.sleep(1)  # son mesajlar yazılsın
+            ts.test_verisini_temizle(baslangic)
+            with sqlite3.connect(ts.db_yolu()) as db:
+                kalan = {t: db.execute(f"SELECT COUNT(*) FROM {t} WHERE dugum = ?",
+                                       (DUGUM,)).fetchone()[0]
+                         for t in ts.TABLOLAR}
+            print(f"Doğrulama: veritabanında kalan {DUGUM} kaydı: {kalan}")
+            sonuc["temizlik_sonrasi_kalan"] = kalan
 
     if arg.json:
         with open(arg.json, "w", encoding="utf-8") as f:

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { API } from "../sabitler";
+import { apiFetch, apiJson } from "../api";
 
-// Güvenlik modu: GET/PUT /api/ayarlar/mod → { mod, etkin_mod, aciklama }.
+// Güvenlik modu: GET/PUT /api/ayarlar/mod →
+// { mod, etkin_mod, aciklama, degistiren, degistirme_zaman }. PUT yalnızca admin.
 // Başka sekmedeki değişiklik ve otomatik modda saatle değişen etkin mod
 // WebSocket "mod" mesajıyla gelir; App onu `uygula` ile buraya iletir.
 export default function useGuvenlikModu() {
@@ -10,12 +11,8 @@ export default function useGuvenlikModu() {
   const [kaydediliyor, setKaydediliyor] = useState(false);
 
   const yenile = useCallback(async () => {
-    try {
-      const cevap = await fetch(`${API}/api/ayarlar/mod`);
-      if (cevap.ok) setBilgi(await cevap.json());
-    } catch {
-      // sessiz geç; WS yeniden bağlanınca tekrar denenir
-    }
+    const veri = await apiJson("/api/ayarlar/mod");
+    if (veri) setBilgi(veri); // hata: sessiz geç; WS yeniden bağlanınca tekrar denenir
   }, []);
 
   useEffect(() => {
@@ -26,11 +23,11 @@ export default function useGuvenlikModu() {
     setKaydediliyor(true);
     setHata(null);
     try {
-      const cevap = await fetch(`${API}/api/ayarlar/mod`, {
+      const cevap = await apiFetch("/api/ayarlar/mod", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mod }),
       });
+      if (cevap.status === 403) throw new Error("Mod yalnızca admin tarafından değiştirilebilir.");
       if (!cevap.ok) throw new Error(`Sunucu hatası: ${cevap.status}`);
       setBilgi(await cevap.json());
     } catch (e) {

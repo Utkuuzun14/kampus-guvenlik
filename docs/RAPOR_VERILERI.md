@@ -13,6 +13,7 @@ Derleme tarihi: 12 Ekim 2026. Ölçümler `scripts/olcum.py` ile alındı.
 6. Ortak sözleşmeler (docs/SOZLESMELER.md, tamamı)
 7. Test sonuçları (docs/TEST_SONUCLARI.md, tamamı)
 8. Akıllı kurallar: korelasyon ve bağlama duyarlı kural motoru (15 Ekim 2026 eki)
+9. Güvenlik: kimlik doğrulama ve yetkilendirme (15 Ekim 2026 eki)
 
 ---
 
@@ -121,13 +122,15 @@ Backend (Python 3.12.10, `backend/requirements.txt`, ana bağımlılıklar):
 | paho-mqtt | 2.1.0 | MQTT istemcisi (backend, üreteç, testler) |
 | pydantic | 2.13.5 | veri doğrulama (FastAPI) |
 | python-dotenv | 1.2.3 | .env ayarlarını okuma |
+| PyJWT | 2.15.1 | panel oturum token'ı (JWT HS256); 15 Ekim 2026'da eklendi (§9) |
 | starlette | 1.7.0 | FastAPI altyapısı |
 | uvicorn | 0.54.0 | ASGI sunucusu |
 | watchfiles | 1.3.0 | geliştirmede otomatik yeniden yükleme (--reload) |
 | websockets | 17.1 | WebSocket (uvicorn) ve ölçüm istemcisi |
 
 Standart kütüphane: `sqlite3` (veritabanı), `smtplib` + `ssl` + `email` (e-posta), `threading`.
-`requirements.txt` toplam 19 sabitlenmiş paket içerir (dolaylı bağımlılıklar dahil).
+`requirements.txt` toplam 20 sabitlenmiş paket içerir (dolaylı bağımlılıklar dahil; 12 Ekim'de 19, PyJWT ile 20).
+Parola özeti için ek paket kullanılmadı: `hashlib.scrypt` + `hmac` (standart kütüphane).
 
 Frontend (Node v24.21.0, `frontend/package.json`):
 
@@ -624,3 +627,66 @@ MQTT konu/payload sözleşmesi ve histerezis eşikleri değişmedi.
 | T10 Yangın teyidi | 12/12 kontrol: duman→alev ve alev→duman sırasında tek teyit, yangın sürerken tekrar yok, normalden sonra yeni teyit; 11 sn fark (pencere dışı) teyit üretmiyor |
 | T11 Güvenlik modu | 10/10 kontrol: mesai bilgi, mesai dışı orta, gece yüksek; geçersiz mod 422; otomatik saat eşlemesi 9/9 (hafta içi 10:00, 20:00, 02:00, cumartesi 11:00 ve sınır saatleri) |
 | T1–T9 regresyon | Hepsi başarılı (mod test süresince mesai dışı) |
+
+---
+
+## 9. Güvenlik: kimlik doğrulama ve yetkilendirme (15 Ekim 2026 eki)
+
+Bu bölüm 12 Ekim derlemesinden sonra eklenen panel girişini özetler; ayrıntılı
+sözleşme `docs/SOZLESMELER.md` §5, §7 ve §9'da, test sonuçları
+`docs/TEST_SONUCLARI.md`'de (T12) yer alır. Kod: `backend/app/kimlik.py`,
+`backend/app/veritabani.py` (kullanıcı fonksiyonları), `scripts/kullanici_ekle.py`.
+
+> **Kısıt giderildi:** 12 Ekim sürümünde panel ve API kimlik doğrulaması olmadan
+> erişilebiliyordu; alarmı çözen operatörün adı serbest metinle girildiği için
+> denetlenemiyordu. Bu sürümde `/api/saglik` ve `/api/giris` dışındaki tüm uçlar ve
+> WebSocket oturum ister; onaylayan kişi oturumdan gelir.
+
+### Tasarım
+| Konu | Karar |
+|---|---|
+| Parola saklama | `hashlib.scrypt` (n=2¹⁴, r=8, p=1, 32 bayt), kullanıcıya özel 16 baytlık rastgele tuz; sabit zamanlı karşılaştırma (`hmac.compare_digest`). Parola 8–128 karakter (üst sınır, pahalı özet hesabıyla hizmet engellemeyi önler). |
+| Oturum | JWT HS256 (PyJWT): `sub`, `rol`, `ad`, `iat`, `exp`; süre `TOKEN_SURE_SAAT` (8 sa). Anahtar `JWT_GIZLI_ANAHTAR` (`.env`); yoksa açılışta rastgele üretilir (yeniden başlatınca oturumlar düşer). |
+| Yetkilendirme (RBAC) | İki rol: **operatör** (tüm okuma uçları + alarm durumunu ilerletme) ve **admin** (ek olarak güvenlik modu ve kullanıcı yönetimi). Koruma FastAPI `Depends` ile tek yerde (router düzeyinde); rol her istekte veritabanından okunur, pasif yapılan kullanıcının eski token'ı hemen geçersizleşir. |
+| Kaba kuvvet koruması | Aynı kullanıcı adı + IP için 5 hatalı denemeden sonra 60 sn kilit (HTTP 429, `Retry-After`). Hata mesajı geneldir ("Kullanıcı adı veya parola hatalı"); kullanıcı yokken de aynı süren scrypt hesabı yapılır (kullanıcı adı tahmini zorlaşır). |
+| Denetim kaydı | `giris_kayitlari` (zaman, kullanıcı adı, IP, başarılı); alarm adımlarında `olay_adimlari.kim` ve modu değiştiren admin (`ayarlar.guvenlik_modu_degistiren`). |
+| Taşıma | WebSocket `?token=` ile; geçersizse 4401 kapanış kodu. Token uvicorn loglarında maskelenir. CORS yalnızca panel adresleriyle sınırlı (`*` kaldırıldı). |
+| İlk kurulum | `scripts/kullanici_ekle.py` (etkileşimli, `getpass`); koda gömülü kullanıcı/parola yok. Kullanıcı yoksa backend açılışta uyarır. |
+| Veri sıfırlama | `scripts/db_sifirla.py` olay/ölçüm verisi ve giriş kayıtlarını siler, `kullanicilar` tablosunu korur. |
+
+### Yetki matrisi
+| İşlem | Token'sız | Operatör | Admin |
+|---|---|---|---|
+| Sağlık kontrolü, giriş | ✓ | ✓ | ✓ |
+| Olay, düğüm, geçmiş, istatistik okuma; WebSocket | 401 / 4401 | ✓ | ✓ |
+| Alarmı ilerletme (görüldü / müdahale / çözüldü) | 401 | ✓ | ✓ |
+| Güvenlik modunu değiştirme | 401 | 403 | ✓ |
+| Kullanıcı ekleme / rol / pasif / parola sıfırlama | 401 | 403 | ✓ |
+
+### Panel
+Giriş ekranı (kullanıcı adı, parola göster/gizle, "Beni hatırla"), üst barda kullanıcı
+adı + rol rozeti + Çıkış; operatörde güvenlik modu seçici kilitli ("Mod yalnızca admin
+tarafından değiştirilebilir"); mod kutusunda "değiştiren: <ad>, <saat>". Alarm onay
+penceresinde operatör adı alanı kaldırıldı (otomatik). Admin için "Kullanıcılar" penceresi.
+Herhangi bir 401 ya da WS 4401 oturumu kapatıp giriş ekranına döner.
+
+### Yeni arayüzler ve şema
+| Tür | Ad | Açıklama |
+|---|---|---|
+| REST | `POST /api/giris` | `{token, kullanici}`; 401 / 429 |
+| REST | `GET /api/ben` | token sahibinin bilgisi |
+| REST | `GET`, `POST /api/kullanicilar`; `PATCH /api/kullanicilar/{ad}` | admin; 409: kendini pasif yapma, son admini düşürme, alınmış ad |
+| Değişiklik | `PATCH /api/olaylar/{id}/durum` | `onaylayan` artık token'dan; gövdedeki alan yok sayılır |
+| Değişiklik | `PUT /api/ayarlar/mod` | yalnızca admin (403); yanıt ve WS `mod` mesajı `degistiren`, `degistirme_zaman` taşır |
+| Tablo | `kullanicilar` | kullanici_adi (UNIQUE), ad_soyad, rol, parola_hash, tuz, aktif, olusturma, son_giris |
+| Tablo | `giris_kayitlari` | zaman, kullanici_adi, ip, basarili |
+
+Tablolar kayıpsız eklenir (`CREATE TABLE IF NOT EXISTS`); mevcut olay verisi değişmez.
+MQTT sözleşmesi, kural motoru ve e-posta bildirimi değişmedi.
+
+### Doğrulama (15 Ekim 2026)
+| Test | Sonuç |
+|---|---|
+| T12 Kimlik doğrulama | 18/18 kontrol: token'sız 401, başka anahtarla imzalı token 401, yanlış parola ve olmayan kullanıcı aynı 401 mesajı, 6. hatalı deneme 429, pasif kullanıcı 401, operatör mod 403 / admin 200 (`degistiren` dolu), operatör kullanıcı listesi 403, admin kendini pasif yapamaz 409, kısa parola 422, son admin kuralı, operatörün çözdüğü alarmda `kim` = operatörün adı, canlı backend'e süresi dolmuş token 401, WS token'sız / bozuk 4401, `/api/saglik` token'sız 200, 87 yanıtın hiçbirinde parola özeti/tuz yok |
+| T9 uyarlaması | onaylayan token'dan; gövdedeki sahte `onaylayan` yok sayıldı; geçersiz durum ve 301 karakter not yine 422 |
+| T1–T11 regresyon | Hepsi başarılı (istekler geçici admin token'ıyla) |

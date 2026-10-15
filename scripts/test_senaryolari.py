@@ -1,5 +1,5 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T11).
+Test senaryoları scripti (rapor Tablo 6, T1-T12).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
 işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
 göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
@@ -10,7 +10,12 @@ T9, olay yaşam döngüsünü doğrular: PATCH /api/olaylar/{id}/durum ile ileri
 geçişler, geri gitmede 409, WebSocket olay_guncelleme ve /api/istatistik/mudahale.
 T10, yangın teyidini (duman + alev korelasyonu) canlı ve kural fonksiyonu
 üzerinden doğrular. T11, güvenlik modunu (PUT/GET /api/ayarlar/mod, WS "mod")
-ve moda/saate bağlı hareket kuralını doğrular.
+ve moda/saate bağlı hareket kuralını doğrular. T12, kimlik doğrulama ve rol
+tabanlı yetkilendirmeyi (401/403/409/429, WS 4401, token'dan gelen onaylayan) doğrular.
+API korumalı olduğundan script başta veritabani modülüyle rastgele adlı ve
+parolalı geçici bir admin ve operatör oluşturup giriş yapar; istekler varsayılan
+olarak admin token'ıyla, T9/T12'deki durum geçişleri operatör token'ıyla yapılır.
+Sonda (hata olsa da) bu kullanıcılar ve giriş kayıtları silinir.
 Hareket beklentileri "orta" olduğundan script başta güvenlik modunu mesai_disi
 yapar ve sonunda (hata olsa da) kullanıcının önceki moduna geri alır.
 Backend histerezis durumunu bellekte tuttuğu için testler başta test_dugum'u
@@ -28,25 +33,35 @@ test_dugum kayıtları olaylar, olay_adimlari ve sensor_gecmis tablolarından si
 import json
 import time
 import sys
+from contextlib import contextmanager
 from datetime import datetime
 import os
+import secrets
 import sqlite3
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import paho.mqtt.client as mqtt
+from websockets.exceptions import ConnectionClosed
 from websockets.sync.client import connect as ws_baglan  # uvicorn bağımlılığı, venv'de var
 
 BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
 sys.path.insert(0, BACKEND_DIZINI)
-from app import config, kurallar  # noqa: E402
+from app import config, kurallar, veritabani  # noqa: E402
 import sahte_veri  # noqa: E402  (aynı dizin: LWT'li client ve kopma fonksiyonu)
 
 API = "http://127.0.0.1:8000"
 WS_URL = "ws://127.0.0.1:8000/ws"
 DUGUM = "test_dugum"
 TABLOLAR = ("olaylar", "sensor_gecmis")
+ROL_AD = {"admin": "Admin", "operator": "Operatör"}
+
+# api_istek / ws_adresi'nin varsayılan token'ı (main() geçici admin'inkini koyar)
+TOKEN = None
+# Bu çalıştırmadaki tüm API yanıt gövdeleri (T12: parola özeti hiçbir yanıtta yok mu)
+YANITLAR = []
 
 
 def db_yolu():
@@ -103,10 +118,68 @@ def yayinla(client, sensor, deger):
     client.publish(konu, json.dumps(mesaj, ensure_ascii=False), qos=1)
 
 
+def api_istek_tam(yol, yontem="GET", govde=None, token=...):
+    """(HTTP kodu, JSON gövde, başlıklar). token verilmezse TOKEN; None: tokensız."""
+    token = TOKEN if token is ... else token
+    basliklar = {"Content-Type": "application/json"}
+    if token:
+        basliklar["Authorization"] = f"Bearer {token}"
+    veri = None if govde is None else json.dumps(govde).encode("utf-8")
+    istek = urllib.request.Request(f"{API}{yol}", data=veri, method=yontem, headers=basliklar)
+    try:
+        with urllib.request.urlopen(istek, timeout=5) as r:
+            kod, metin, ust = r.status, r.read().decode("utf-8"), r.headers
+    except urllib.error.HTTPError as e:
+        kod, metin, ust = e.code, e.read().decode("utf-8"), e.headers
+    YANITLAR.append(metin)
+    return kod, json.loads(metin or "null"), ust
+
+
+def api_istek(yol, yontem="GET", govde=None, token=...):
+    """(HTTP kodu, JSON gövde). Hata kodları da istisna atmadan döner."""
+    return api_istek_tam(yol, yontem, govde, token)[:2]
+
+
+def ws_adresi(token=...):
+    """/ws adresi, ?token= ile (token verilmezse TOKEN; None: tokensız)."""
+    token = TOKEN if token is ... else token
+    return f"{WS_URL}?token={urllib.parse.quote(token)}" if token else WS_URL
+
+
+@contextmanager
+def gecici_kullanicilar(*roller):
+    """
+    Her rol için rastgele adlı ve parolalı geçici kullanıcı oluşturur (veritabani
+    modülüyle, backend'in DB'sine) ve API'ye giriş yapar. Çıkışta, hata olsa da,
+    kullanıcıları ve giriş kayıtlarını siler. olcum.py de bunu kullanır.
+    Verilen: {rol: {"kullanici_adi", "ad_soyad", "rol", "parola", "token"}}
+    """
+    config.VERITABANI_YOLU = db_yolu()  # veritabani modülü göreli yolu cwd'ye göre açardı
+    ek = secrets.token_hex(3)
+    oturumlar, adlar = {}, []
+    try:
+        for rol in roller:
+            ad = f"t_{'admin' if rol == 'admin' else 'op'}_{ek}"
+            parola = secrets.token_urlsafe(18)
+            k = veritabani.kullanici_ekle(ad, f"Test {ROL_AD[rol]} {ek}", rol, parola)
+            adlar.append(ad)
+            kod, v = api_istek("/api/giris", "POST", {"kullanici_adi": ad, "parola": parola},
+                               token=None)
+            if kod != 200:
+                raise RuntimeError(f"geçici {rol} giriş yapamadı (HTTP {kod}); backend çalışıyor mu?")
+            oturumlar[rol] = {**k, "parola": parola, "token": v["token"]}
+        print("Geçici kullanıcılar: " + ", ".join(f"{o['kullanici_adi']} ({r})"
+                                                  for r, o in oturumlar.items()))
+        yield oturumlar
+    finally:
+        silinen = [veritabani.kullanici_sil(ad) for ad in adlar]
+        print(f"Geçici kullanıcılar silindi: {', '.join(adlar) or '-'} "
+              f"({sum(k for k, _ in silinen)} kullanıcı, {sum(g for _, g in silinen)} giriş kaydı)")
+
+
 def son_olay():
     """Backend API'den en son olayı çeker."""
-    with urllib.request.urlopen(f"{API}/api/olaylar?limit=1", timeout=5) as r:
-        veri = json.loads(r.read().decode("utf-8"))
+    veri = api_istek("/api/olaylar?limit=1")[1]
     return veri[0] if veri else None
 
 
@@ -164,8 +237,7 @@ def test_alarm_yok(client, no, ad, sensor, deger):
 
 def yeni_olaylar(onceki_id):
     """onceki_id'den sonra test düğümü için oluşan olaylar (eski → yeni)."""
-    with urllib.request.urlopen(f"{API}/api/olaylar?limit=100", timeout=5) as r:
-        veri = json.loads(r.read().decode("utf-8"))
+    veri = api_istek("/api/olaylar?limit=100")[1]
     return sorted((o for o in veri if o["id"] > onceki_id and o["dugum"] == DUGUM),
                   key=lambda o: o["id"])
 
@@ -303,8 +375,7 @@ def test_bildirim():
 
 def dugum_durumu():
     """/api/dugumler'deki test düğümü (yoksa None)."""
-    with urllib.request.urlopen(f"{API}/api/dugumler", timeout=5) as r:
-        liste = json.loads(r.read().decode("utf-8"))
+    liste = api_istek("/api/dugumler")[1]
     return next((d for d in liste if d["id"] == DUGUM), None)
 
 
@@ -362,18 +433,6 @@ def test_lwt():
     return basarili
 
 
-def api_istek(yol, yontem="GET", govde=None):
-    """(HTTP kodu, JSON gövde). Hata kodları da istisna atmadan döner."""
-    veri = None if govde is None else json.dumps(govde).encode("utf-8")
-    istek = urllib.request.Request(f"{API}{yol}", data=veri, method=yontem,
-                                   headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(istek, timeout=5) as r:
-            return r.status, json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read().decode("utf-8") or "null")
-
-
 def ws_mesaj_bekle(ws, kosul, sure=3.0):
     """Koşulu sağlayan ilk WS mesajı (yoksa None); diğer mesajlar atlanır."""
     bitis = time.monotonic() + sure
@@ -387,21 +446,23 @@ def ws_mesaj_bekle(ws, kosul, sure=3.0):
     return None
 
 
-def test_yasam_dongusu(client, baslangic):
+def test_yasam_dongusu(client, baslangic, operator):
     """
     T9: Alarm onaylama ve olay yaşam döngüsü (yeni → goruldu → mudahale → cozuldu).
-    Hareket alarmı üretilir, panelin PATCH çağrıları taklit edilir; bir WS
-    istemcisi olay_guncelleme yayınını dinler.
+    Hareket alarmı üretilir, panelin PATCH çağrıları operatör token'ıyla taklit
+    edilir; bir WS istemcisi olay_guncelleme yayınını dinler. Onaylayan token'dan
+    gelir: gövdedeki onaylayan alanı (eski istemciler) yok sayılır.
     """
     print("\n[T9] Alarm onaylama / olay yaşam döngüsü")
     kontroller = []
+    kim = operator["ad_soyad"]
 
     def kontrol(ad, kosul):
         print(f"    {'✓' if kosul else '✗'} {ad}")
         kontroller.append(bool(kosul))
 
     def durum_patch(olay_id, govde):
-        return api_istek(f"/api/olaylar/{olay_id}/durum", "PATCH", govde)
+        return api_istek(f"/api/olaylar/{olay_id}/durum", "PATCH", govde, token=operator["token"])
 
     try:
         onceki_id = son_olay_id()
@@ -416,8 +477,9 @@ def test_yasam_dongusu(client, baslangic):
             raise Exception("alarm oluşmadı, kalan adımlar atlandı")
         oid = olay["id"]
 
-        with ws_baglan(WS_URL, open_timeout=5) as ws:
-            kod, v = durum_patch(oid, {"durum": "goruldu", "onaylayan": "T9 Operatör",
+        with ws_baglan(ws_adresi(), open_timeout=5) as ws:
+            # Eski istemci gibi sahte onaylayan gönderilir; sunucu token sahibini yazmalı
+            kod, v = durum_patch(oid, {"durum": "goruldu", "onaylayan": "Sahte Kişi",
                                        "not": "Kamera kontrol ediliyor"})
             kontrol(f"PATCH goruldu → {kod}, goruldu_zaman dolu",
                     kod == 200 and v["durum"] == "goruldu" and v["goruldu_zaman"]
@@ -427,7 +489,7 @@ def test_yasam_dongusu(client, baslangic):
             kontrol("WebSocket olay_guncelleme mesajı geldi (durum=goruldu)",
                     mesaj and mesaj["veri"]["durum"] == "goruldu")
 
-        kod, v = durum_patch(oid, {"durum": "cozuldu", "onaylayan": "T9 Operatör"})
+        kod, v = durum_patch(oid, {"durum": "cozuldu"})
         kontrol(f"PATCH cozuldu → {kod}, atlanan mudahale_zaman = cozuldu_zaman",
                 kod == 200 and v["durum"] == "cozuldu" and v["cozuldu_zaman"]
                 and v["mudahale_zaman"] == v["cozuldu_zaman"]
@@ -435,23 +497,25 @@ def test_yasam_dongusu(client, baslangic):
         adimlar = v.get("adimlar", []) if kod == 200 else []
         kontrol(f"olay_adimlari: {[(a['durum'], a['kim'], a['not_metni']) for a in adimlar]}",
                 [a["durum"] for a in adimlar] == ["goruldu", "cozuldu"]
-                and adimlar[0]["kim"] == "T9 Operatör"
+                and all(a["kim"] == kim for a in adimlar)
                 and adimlar[0]["not_metni"] == "Kamera kontrol ediliyor")
+        kontrol(f"gövdedeki onaylayan yok sayılıyor (\"Sahte Kişi\" gönderildi, "
+                f"kim/onaylayan = token sahibi \"{kim}\")",
+                kod == 200 and v["onaylayan"] == kim
+                and not any(a["kim"] == "Sahte Kişi" for a in adimlar))
 
-        kod, v = durum_patch(oid, {"durum": "goruldu", "onaylayan": "T9 Operatör"})
+        kod, v = durum_patch(oid, {"durum": "goruldu"})
         kontrol(f"geri gitme (cozuldu → goruldu) → {kod}, mevcut={v.get('mevcut')}",
                 kod == 409 and v.get("mevcut") == "cozuldu")
-        kod, _ = durum_patch(oid, {"durum": "cozuldu", "onaylayan": "T9 Operatör"})
+        kod, _ = durum_patch(oid, {"durum": "cozuldu"})
         kontrol(f"aynı duruma geçiş (cozuldu → cozuldu) → {kod}", kod == 409)
 
-        kod, _ = durum_patch(10 ** 9, {"durum": "cozuldu", "onaylayan": "T9 Operatör"})
+        kod, _ = durum_patch(10 ** 9, {"durum": "cozuldu"})
         kontrol(f"olmayan id → {kod}", kod == 404)
         hatalilar = [
-            ("durum=xyz", {"durum": "xyz", "onaylayan": "T9"}),
-            ("durum=yeni", {"durum": "yeni", "onaylayan": "T9"}),
-            ("boş onaylayan", {"durum": "goruldu", "onaylayan": "   "}),
-            ("41 karakter onaylayan", {"durum": "goruldu", "onaylayan": "x" * 41}),
-            ("301 karakter not", {"durum": "goruldu", "onaylayan": "T9", "not": "x" * 301}),
+            ("durum=xyz", {"durum": "xyz"}),
+            ("durum=yeni", {"durum": "yeni"}),
+            ("301 karakter not", {"durum": "goruldu", "not": "x" * 301}),
         ]
         kodlar = {ad: durum_patch(oid, g)[0] for ad, g in hatalilar}
         kontrol(f"geçersiz gövde → 422 {kodlar}", all(k == 422 for k in kodlar.values()))
@@ -618,7 +682,7 @@ def test_mod(client):
         return next((o for o in yeni_olaylar(onceki_id) if o["sensor"] == "hareket"), None)
 
     try:
-        with ws_baglan(WS_URL, open_timeout=5) as ws:
+        with ws_baglan(ws_adresi(), open_timeout=5) as ws:
             kod, v = mod_ayarla("mesai")
             mesaj = ws_mesaj_bekle(ws, lambda m: m.get("tip") == "mod")
             kontrol(f"PUT mesai → {kod} {v}", kod == 200 and v["mod"] == "mesai"
@@ -687,35 +751,214 @@ def test_mod(client):
     return basarili
 
 
+def ws_kapanis_kodu(adres):
+    """WS'ye bağlanıp sunucunun kapatma kodunu döndürür (açık kalırsa None)."""
+    try:
+        with ws_baglan(adres, open_timeout=5) as ws:
+            ws.recv(timeout=3)
+    except ConnectionClosed as e:
+        return e.rcvd.code if e.rcvd else None
+    except TimeoutError:
+        return None
+    return None
+
+
+def test_kimlik(client, oturum):
+    """
+    T12: Kimlik doğrulama ve rol tabanlı yetkilendirme. Token'sız/bozuk/süresi
+    dolmuş istek 401, yetersiz rol 403, kaba kuvvet 429, WS 4401; onaylayan
+    token'dan gelir; parola özeti hiçbir yanıtta dönmez.
+    """
+    import jwt
+    from app import kimlik
+
+    print("\n[T12] Kimlik doğrulama ve yetkilendirme")
+    admin, op = oturum["admin"], oturum["operator"]
+    ek = secrets.token_hex(3)
+    pasif_ad, kaba_ad = f"t_pasif_{ek}", f"t_yok_{ek}"
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(bool(kosul))
+
+    def giris(ad, parola):
+        return api_istek_tam("/api/giris", "POST", {"kullanici_adi": ad, "parola": parola},
+                             token=None)
+
+    try:
+        kod, _ = api_istek("/api/saglik", token=None)
+        kontrol(f"/api/saglik tokensız → {kod}", kod == 200)
+        kod, v = api_istek("/api/olaylar", token=None)
+        kontrol(f"/api/olaylar tokensız → {kod} ({v and v.get('detail')})", kod == 401)
+        sahte = jwt.encode({"sub": op["kullanici_adi"], "rol": "admin",
+                            "exp": int(time.time()) + 600}, secrets.token_urlsafe(48), "HS256")
+        kod, _ = api_istek("/api/olaylar", token=sahte)
+        kontrol(f"başka anahtarla imzalanmış (rol=admin yazılmış) token → {kod}", kod == 401)
+
+        kod, v, _ = giris(op["kullanici_adi"], "yanlis-parola")
+        kod2, v2, _ = giris(kaba_ad, "yanlis-parola")
+        kontrol(f"yanlış parola → {kod}, olmayan kullanıcı → {kod2}; aynı genel mesaj "
+                f"(\"{v and v.get('detail')}\")",
+                kod == 401 and kod2 == 401 and v == v2
+                and v.get("detail") == "Kullanıcı adı veya parola hatalı")
+
+        # Kaba kuvvet: ayrı ve olmayan bir ad (test operatörü kilitlenmesin);
+        # yukarıdaki deneme 1. hataydı
+        kodlar = [giris(kaba_ad, "yanlis-parola")[0] for _ in range(4)]
+        kod, v, ust = giris(kaba_ad, "yanlis-parola")
+        kontrol(f"5 hatalı deneme {[401] + kodlar} → 6. deneme {kod}, "
+                f"Retry-After={ust.get('Retry-After')} ({v and v.get('detail')})",
+                kodlar == [401] * 4 and kod == 429 and int(ust.get("Retry-After") or 0) > 0)
+
+        veritabani.kullanici_ekle(pasif_ad, "Test Pasif", "operator", op["parola"])
+        kod, _ = api_istek(f"/api/kullanicilar/{pasif_ad}", "PATCH", {"aktif": False})
+        kod2, _, _ = giris(pasif_ad, op["parola"])
+        kontrol(f"pasif kullanıcı (parola doğru) → {kod2}", kod == 200 and kod2 == 401)
+
+        mod_ayarla("mesai_disi")
+        kod, v = api_istek("/api/ayarlar/mod", "PUT", {"mod": "gece"}, token=op["token"])
+        kontrol(f"operatör PUT /api/ayarlar/mod → {kod}, mod değişmedi",
+                kod == 403 and api_istek("/api/ayarlar/mod")[1]["mod"] == "mesai_disi")
+        with ws_baglan(ws_adresi(op["token"]), open_timeout=5) as ws:
+            kod, v = mod_ayarla("gece")
+            mesaj = ws_mesaj_bekle(ws, lambda m: m.get("tip") == "mod")
+        kontrol(f"admin PUT /api/ayarlar/mod → {kod}, degistiren=\"{v.get('degistiren')}\"",
+                kod == 200 and v["mod"] == "gece" and v["degistiren"] == admin["ad_soyad"]
+                and v["degistirme_zaman"])
+        kontrol("WS mod mesajı degistiren alanını taşıyor (operatör sekmesine geldi)",
+                mesaj and mesaj["veri"].get("degistiren") == admin["ad_soyad"])
+        mod_ayarla("mesai_disi")
+
+        kod, _ = api_istek("/api/kullanicilar", token=op["token"])
+        kod2, liste = api_istek("/api/kullanicilar")
+        kontrol(f"/api/kullanicilar operatör → {kod}, admin → {kod2}",
+                kod == 403 and kod2 == 200
+                and any(k["kullanici_adi"] == op["kullanici_adi"] for k in liste))
+        kod, v = api_istek(f"/api/kullanicilar/{admin['kullanici_adi']}", "PATCH",
+                           {"aktif": False})
+        kontrol(f"admin kendini pasif yapamaz → {kod}", kod == 409)
+        kod, _ = api_istek("/api/kullanicilar", "POST", {"kullanici_adi": f"t_kisa_{ek}",
+                                                         "rol": "operator", "parola": "1234567"})
+        kontrol(f"7 karakterlik parolayla kullanıcı ekleme → {kod}", kod == 422)
+        sonuc = son_admin_birim_testi()
+        kontrol(f"birim: son aktif admin operatöre düşürülemez / pasif yapılamaz ({sonuc})",
+                sonuc == ["son_admin"] * 2)
+
+        onceki_id = son_olay_id()
+        yayinla(client, "hareket", 1)
+        time.sleep(1.5)
+        olay = next((o for o in yeni_olaylar(onceki_id) if o["sensor"] == "hareket"), None)
+        kod, v = api_istek(f"/api/olaylar/{olay['id']}/durum", "PATCH",
+                           {"durum": "cozuldu", "onaylayan": "Sahte Kişi"}, token=op["token"])
+        detay = api_istek(f"/api/olaylar/{olay['id']}")[1]
+        kimler = [a["kim"] for a in detay.get("adimlar", [])]
+        kontrol(f"operatör PATCH durum → {kod}, olay_adimlari.kim = {kimler}",
+                kod == 200 and kimler == [op["ad_soyad"]] and detay["onaylayan"] == op["ad_soyad"])
+
+        if config.JWT_ANAHTAR_URETILDI:
+            dolmus = kimlik.token_uret(op, sure_sn=-60)
+            kontrol("süresi dolmuş token reddedilir (süreç içi: .env'de JWT_GIZLI_ANAHTAR yok, "
+                    "canlı backend'in anahtarı bilinmiyor)", kimlik.token_coz(dolmus) is None)
+        else:
+            gecerli = kimlik.token_uret(op, sure_sn=600)
+            dolmus = kimlik.token_uret(op, sure_sn=-60)
+            kod, _ = api_istek("/api/ben", token=gecerli)
+            kod2, v = api_istek("/api/ben", token=dolmus)
+            kontrol(f"canlı: .env anahtarıyla imzalı token → {kod}; aynı token süresi "
+                    f"dolmuş (exp 60 sn önce) → {kod2}", kod == 200 and kod2 == 401)
+
+        kodlar = [ws_kapanis_kodu(WS_URL), ws_kapanis_kodu(f"{WS_URL}?token=bozuk")]
+        kontrol(f"WS tokensız / bozuk token → kapanış kodu {kodlar}", kodlar == [4401, 4401])
+        kontrol("WS geçerli token → bağlantı açık kalır",
+                ws_kapanis_kodu(ws_adresi(op["token"])) is None)
+    except Exception as e:
+        print(f"    ✗ hata: {e!r}")
+        kontroller.append(False)
+    finally:
+        veritabani.kullanici_sil(pasif_ad)
+        veritabani.kullanici_sil(kaba_ad)  # yalnızca giriş kayıtları
+
+    gizli = ['"parola_hash"', '"tuz"', admin["parola"], op["parola"]]
+    sizan = [g for g in gizli if any(g in y for y in YANITLAR)]
+    kontrol(f"{len(YANITLAR)} API yanıtının hiçbirinde parola_hash / tuz / parola yok"
+            + (f" — BULUNAN: {len(sizan)}" if sizan else ""), not sizan)
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
+def son_admin_birim_testi():
+    """
+    Son aktif admin kuralı geçici bir veritabanında (canlı DB'de başka admin
+    olabilir): tek admin operatöre düşürülür ve pasif yapılır → ikisi de son_admin.
+    """
+    import io
+    import tempfile
+    from contextlib import redirect_stdout
+    from unittest import mock
+
+    with tempfile.TemporaryDirectory() as klasor:
+        with mock.patch.object(config, "VERITABANI_YOLU", os.path.join(klasor, "t.db")):
+            with redirect_stdout(io.StringIO()):  # boş DB'nin "[DB] Göç" satırı gerçek DB sanılmasın
+                veritabani.kur()
+            veritabani.kullanici_ekle("tek_admin", None, "admin", "parola-123")
+            return [veritabani.kullanici_guncelle("tek_admin", rol="operator")[0],
+                    veritabani.kullanici_guncelle("tek_admin", aktif=False)[0]]
+
+
+def mod_kaydi_ayarlari():
+    """Modu kimin/ne zaman değiştirdiği (ayarlar tablosu): {anahtar: değer | None}."""
+    from app.main import MOD_DEGISTIREN_ANAHTAR, MOD_ZAMAN_ANAHTAR
+    return {a: veritabani.ayar_getir(a) for a in (MOD_DEGISTIREN_ANAHTAR, MOD_ZAMAN_ANAHTAR)}
+
+
+def mod_kaydini_geri_yukle(onceki):
+    """Testin mod değişiklikleri 'değiştiren' alanında silinen geçici admin'i bırakmasın."""
+    with sqlite3.connect(db_yolu()) as conn:
+        for anahtar, deger in onceki.items():
+            if deger is None:
+                conn.execute("DELETE FROM ayarlar WHERE anahtar = ?", (anahtar,))
+            else:
+                conn.execute("INSERT INTO ayarlar (anahtar, deger) VALUES (?, ?) ON CONFLICT(anahtar) "
+                             "DO UPDATE SET deger = excluded.deger", (anahtar, deger))
+
+
 def main():
+    global TOKEN
     print("=" * 60)
     print("KAMPÜS GÜVENLİK SİSTEMİ - TEST SENARYOLARI (Tablo 6)")
     print("=" * 60)
     print("Not: Broker + backend çalışmalı, sahte üreteç kapalı olmalı.")
 
     baslangic = son_kayit_idleri()
-    # T1-T9 hareketi "orta" bekler: testler mesai_disi modunda koşar,
-    # kullanıcının modu sonunda geri yüklenir
-    try:
-        onceki_mod = api_istek("/api/ayarlar/mod")[1]["mod"]
-        mod_ayarla("mesai_disi")
-        print(f"Güvenlik modu test süresince mesai_disi (önceki: {onceki_mod}).")
-    except Exception as e:
-        onceki_mod = None
-        print(f"Güvenlik modu okunamadı ({e}); backend çalışıyor mu?")
-    client = mqtt_baglan()
-    try:
-        testleri_calistir(client, baslangic)
-    finally:
-        client.loop_stop()
-        client.disconnect()
-        if onceki_mod:
-            kod, _ = mod_ayarla(onceki_mod)
-            print(f"\nGüvenlik modu geri alındı: {onceki_mod} (HTTP {kod})")
-        test_verisini_temizle(baslangic)
+    with gecici_kullanicilar("admin", "operator") as oturum:
+        onceki_mod_kaydi = mod_kaydi_ayarlari()
+        TOKEN = oturum["admin"]["token"]
+        # T1-T9 hareketi "orta" bekler: testler mesai_disi modunda koşar,
+        # kullanıcının modu sonunda geri yüklenir
+        try:
+            onceki_mod = api_istek("/api/ayarlar/mod")[1]["mod"]
+            mod_ayarla("mesai_disi")
+            print(f"Güvenlik modu test süresince mesai_disi (önceki: {onceki_mod}).")
+        except Exception as e:
+            onceki_mod = None
+            print(f"Güvenlik modu okunamadı ({e}); backend çalışıyor mu?")
+        client = mqtt_baglan()
+        try:
+            testleri_calistir(client, baslangic, oturum)
+        finally:
+            client.loop_stop()
+            client.disconnect()
+            if onceki_mod:
+                kod, _ = mod_ayarla(onceki_mod)
+                print(f"\nGüvenlik modu geri alındı: {onceki_mod} (HTTP {kod})")
+            mod_kaydini_geri_yukle(onceki_mod_kaydi)
+            test_verisini_temizle(baslangic)
 
 
-def testleri_calistir(client, baslangic):
+def testleri_calistir(client, baslangic, oturum):
     time.sleep(1)
     normale_cek(client)
 
@@ -756,15 +999,17 @@ def testleri_calistir(client, baslangic):
 
     sonuclar.append(("T6", "Bildirim (e-posta)", test_bildirim()))
     sonuclar.append(("T7", "LWT: çevrimdışı ve geri gelme", test_lwt()))
-    sonuclar.append(("T9", "Olay yaşam döngüsü (onaylama)", test_yasam_dongusu(client, baslangic)))
+    sonuclar.append(("T9", "Olay yaşam döngüsü (onaylama)",
+                     test_yasam_dongusu(client, baslangic, oturum["operator"])))
     sonuclar.append(("T10", "Yangın teyidi (korelasyon)", test_korelasyon(client)))
     sonuclar.append(("T11", "Güvenlik modu (zaman kuralı)", test_mod(client)))
+    sonuclar.append(("T12", "Kimlik doğrulama / yetki", test_kimlik(client, oturum)))
 
     # Özet
     print("\n" + "=" * 60)
     print("ÖZET")
     print("=" * 60)
-    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11"]
+    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"]
     for no, ad, sonuc in sorted(sonuclar, key=lambda x: sira.index(x[0])):
         if sonuc is True:
             durum = "BAŞARILI"

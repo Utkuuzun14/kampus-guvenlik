@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { DURUMLAR, DURUM_AD, DURUM_EYLEM } from "../sabitler";
 import { cumleDuzeni, durumu, siradakiDurum } from "../hesaplar";
-import { durumIlerlet, operatorOku, operatorYaz } from "../hooks/useOlayDurumu";
+import { durumIlerlet } from "../hooks/useOlayDurumu";
 
 const NOT_SINIR = 300;
 
@@ -10,17 +10,17 @@ const hataMetni = (h) => {
     return `Bu olay başka bir sekmede ilerletildi${h.mevcut ? ` (şu an: ${DURUM_AD[h.mevcut] ?? h.mevcut})` : ""}.`;
   }
   if (h.durum === 404) return "Olay bulunamadı (silinmiş olabilir).";
-  if (h.durum === 422) return "Operatör adı 1-40, not en fazla 300 karakter olmalı.";
+  if (h.durum === 422) return "Not en fazla 300 karakter olmalı.";
   return h.mesaj || "İşlem yapılamadı.";
 };
 
 // Sıradaki adımın butonu (+ ara adımları atlayan "Çöz" kısayolu) ve onay penceresi.
 // Pencere native <dialog>: odak içeride kalır, Esc ile kapanır.
+// Onaylayan, oturumdaki kullanıcıdır (backend token'dan yazar); burada sorulmaz.
 // onGuncellendi(olay): sunucunun döndürdüğü güncel olay (WS mesajı da ayrıca gelir).
 export default function DurumIlerlet({ olay, onGuncellendi, anaSinif = "durum-btn" }) {
   const siradaki = siradakiDurum(olay);
   const [hedef, setHedef] = useState(null);
-  const [ad, setAd] = useState("");
   const [not, setNot] = useState("");
   const [hata, setHata] = useState(null);
   const [gonderiliyor, setGonderiliyor] = useState(false);
@@ -35,7 +35,6 @@ export default function DurumIlerlet({ olay, onGuncellendi, anaSinif = "durum-bt
   if (!siradaki && !hedef) return null;
 
   const ac = (durum) => {
-    setAd(operatorOku());
     setNot("");
     setHata(null);
     setHedef(durum);
@@ -45,13 +44,11 @@ export default function DurumIlerlet({ olay, onGuncellendi, anaSinif = "durum-bt
 
   const gonder = async (e) => {
     e.preventDefault();
-    const temizAd = ad.trim();
-    if (!temizAd || gonderiliyor) return;
+    if (gonderiliyor) return;
     setGonderiliyor(true);
     setHata(null);
     try {
-      const guncel = await durumIlerlet(olay.id, hedef, temizAd, not.trim());
-      operatorYaz(temizAd);
+      const guncel = await durumIlerlet(olay.id, hedef, not.trim());
       onGuncellendi?.(guncel);
       kapat();
     } catch (h) {
@@ -101,17 +98,11 @@ export default function DurumIlerlet({ olay, onGuncellendi, anaSinif = "durum-bt
             </div>
 
             <label className="durum-alan">
-              <span>Operatör adı</span>
-              <input type="text" value={ad} onChange={(e) => setAd(e.target.value)}
-                maxLength={40} required autoFocus autoComplete="name" />
-            </label>
-
-            <label className="durum-alan">
               <span>
                 Not <span className="kucuk-mono">(isteğe bağlı · {not.length}/{NOT_SINIR})</span>
               </span>
               <textarea value={not} onChange={(e) => setNot(e.target.value)}
-                maxLength={NOT_SINIR} rows={3} />
+                maxLength={NOT_SINIR} rows={3} autoFocus />
             </label>
 
             {hata && <p role="alert" className="durum-hata">{hata}</p>}
@@ -119,7 +110,7 @@ export default function DurumIlerlet({ olay, onGuncellendi, anaSinif = "durum-bt
             <div className="durum-dugmeler">
               <button type="button" className="filtre-btn" onClick={kapat}>Vazgeç</button>
               <button type="submit" className="filtre-btn aktif"
-                disabled={gonderiliyor || !ad.trim()}>
+                disabled={gonderiliyor}>
                 {gonderiliyor ? "Kaydediliyor…" : "Onayla"}
               </button>
             </div>

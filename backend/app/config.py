@@ -4,6 +4,7 @@ Tüm ayarlar tek yerde toplanır. Gizli değerler (.env) ortam değişkeninden,
 sabit değerler doğrudan buradan okunur.
 """
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -92,6 +93,25 @@ BILDIRIM_AKTIF = (os.getenv("BILDIRIM_AKTIF", "true").strip().lower() in ("1", "
 
 # Maildeki panel bağlantısı
 PANEL_URL = os.getenv("PANEL_URL", "http://localhost:5173")
+
+# ---------------- Kimlik doğrulama ----------------
+# JWT (HS256) imza anahtarı. .env'de yoksa her açılışta rastgele üretilir:
+# o durumda backend yeniden başlayınca (--reload dahil) tüm oturumlar düşer.
+JWT_GIZLI_ANAHTAR = os.getenv("JWT_GIZLI_ANAHTAR", "").strip()
+JWT_ANAHTAR_URETILDI = not JWT_GIZLI_ANAHTAR
+if JWT_ANAHTAR_URETILDI:
+    JWT_GIZLI_ANAHTAR = secrets.token_urlsafe(48)
+    print("[CONFIG] UYARI: JWT_GIZLI_ANAHTAR .env'de yok, rastgele üretildi. Backend yeniden "
+          "başlayınca (--reload ile her kod değişikliğinde de) oturumlar düşer.")
+TOKEN_SURE_SAAT = float(os.getenv("TOKEN_SURE_SAAT", "8"))
+# Kaba kuvvet koruması: aynı kullanıcı adı + IP için bu kadar hatadan sonra kilit
+GIRIS_HATA_SINIRI = 5
+GIRIS_KILIT_SN = 60
+# Panelin açıldığı adresler (virgülle ayrılmış); "*" kullanılmaz
+CORS_KAYNAKLAR = [k.strip() for k in os.getenv(
+    "CORS_KAYNAKLAR",
+    "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
+).split(",") if k.strip()]
 
 # Düğüm -> kampüs konum adı. Tek kaynak burası (/api/dugumler); frontend/src/sabitler.js
 # yalnızca harita koordinatlarını tutar.

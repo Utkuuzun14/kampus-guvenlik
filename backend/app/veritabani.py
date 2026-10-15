@@ -1,8 +1,13 @@
 """
 Veritabanı modülü (SQLite).
-Sözleşmedeki tabloları yönetir: olaylar, olay_adimlari, sensor_gecmis ve ayarlar.
+Sözleşmedeki tabloları yönetir: olaylar, olay_adimlari, sensor_gecmis, ayarlar,
+kullanicilar ve giris_kayitlari.
 """
+import hashlib
+import hmac
 import json
+import re
+import secrets
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -29,6 +34,17 @@ _YENI_KOLONLAR = [
 ]
 
 _AKIS_YER = ",".join("?" * len(AKIS_SEVIYELERI))  # SQL IN (...) yer tutucuları
+
+# Kullanıcılar (docs/SOZLESMELER.md §9)
+ROLLER = ("admin", "operator")
+KULLANICI_ADI_DESEN = re.compile(r"^[a-z0-9._-]{3,32}$")
+PAROLA_EN_AZ = 8
+PAROLA_EN_COK = 128  # scrypt pahalı: çok uzun parolayla hizmet engelleme olmasın
+AD_SOYAD_EN_COK = 60
+# scrypt parametreleri (n=2^14, r=8, p=1 → ~16 MB bellek, ~50 ms)
+_SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
+# API'ye dönen kullanıcı alanları (parola_hash ve tuz asla dönmez)
+_KULLANICI_ALANLARI = "id, kullanici_adi, ad_soyad, rol, aktif, olusturma, son_giris"
 
 
 @contextmanager
@@ -92,6 +108,31 @@ def kur():
             CREATE INDEX IF NOT EXISTS ix_gecmis_dugum_sensor
             ON sensor_gecmis (dugum, sensor, id)
         """)
+        # Panel kullanıcıları; yeni tablolar, mevcut veriye dokunmaz
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS kullanicilar (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kullanici_adi TEXT NOT NULL UNIQUE,
+                ad_soyad TEXT,
+                rol TEXT NOT NULL CHECK (rol IN ('admin', 'operator')),
+                parola_hash TEXT NOT NULL,
+                tuz TEXT NOT NULL,
+                aktif INTEGER NOT NULL DEFAULT 1,
+                olusturma REAL,
+                son_giris REAL
+            )
+        """)
+        # Giriş denetim kaydı (başarılı + başarısız)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS giris_kayitlari (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                zaman REAL NOT NULL,
+                kullanici_adi TEXT,
+                ip TEXT,
+                basarili INTEGER NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_giris_zaman ON giris_kayitlari (zaman)")
 
 
 def _olaylar_gocu(conn):
@@ -317,4 +358,161 @@ def ayar_yaz(anahtar, deger):
             "INSERT INTO ayarlar (anahtar, deger) VALUES (?, ?) "
             "ON CONFLICT(anahtar) DO UPDATE SET deger = excluded.deger",
             (anahtar, deger),
+        )
+
+
+# ---------------- Kullanıcılar ve giriş kayıtları ----------------
+
+class KullaniciHatasi(ValueError):
+    """Geçersiz kullanıcı adı / parola / rol; mesaj kullanıcıya gösterilebilir."""
+
+
+class KullaniciVar(Exception):
+    """Aynı kullanıcı adı zaten kayıtlı."""
+
+
+def kullanici_adi_duzelt(ad):
+    """Boşluklar atılır, küçük harfe çevrilir; desene uymazsa KullaniciHatasi."""
+    ad = (ad or "").strip().lower()
+    if not KULLANICI_ADI_DESEN.match(ad):
+        raise KullaniciHatasi("Kullanıcı adı 3-32 karakter olmalı: küçük harf, rakam, . _ -")
+    return ad
+
+
+def parola_kontrol(parola):
+    if not isinstance(parola, str) or not PAROLA_EN_AZ <= len(parola) <= PAROLA_EN_COK:
+        raise KullaniciHatasi(f"Parola {PAROLA_EN_AZ}-{PAROLA_EN_COK} karakter olmalı")
+    return parola
+
+
+def _ad_soyad_duzelt(ad_soyad):
+    ad_soyad = (ad_soyad or "").strip()
+    if len(ad_soyad) > AD_SOYAD_EN_COK:
+        raise KullaniciHatasi(f"Ad soyad en fazla {AD_SOYAD_EN_COK} karakter olmalı")
+    return ad_soyad or None
+
+
+def _rol_kontrol(rol):
+    if rol not in ROLLER:
+        raise KullaniciHatasi("Rol admin ya da operator olmalı")
+    return rol
+
+
+def parola_ozeti(parola, tuz=None):
+    """scrypt ile (ozet_hex, tuz_hex). Tuz verilmezse kullanıcıya özel 16 bayt üretilir."""
+    tuz_b = bytes.fromhex(tuz) if tuz else secrets.token_bytes(16)
+    ozet = hashlib.scrypt(parola.encode("utf-8"), salt=tuz_b, **_SCRYPT)
+    return ozet.hex(), tuz_b.hex()
+
+
+def parola_dogru(parola, ozet_hex, tuz_hex):
+    """Sabit zamanlı karşılaştırma (hmac.compare_digest)."""
+    hesap, _ = parola_ozeti(parola, tuz_hex)
+    return hmac.compare_digest(hesap, ozet_hex)
+
+
+def kullanici_ekle(kullanici_adi, ad_soyad, rol, parola):
+    """Yeni kullanıcı; dönen sözlükte hash/tuz yok. KullaniciHatasi / KullaniciVar atar."""
+    kullanici_adi = kullanici_adi_duzelt(kullanici_adi)
+    ad_soyad = _ad_soyad_duzelt(ad_soyad)
+    _rol_kontrol(rol)
+    ozet, tuz = parola_ozeti(parola_kontrol(parola))
+    try:
+        with baglanti() as conn:
+            conn.execute(
+                "INSERT INTO kullanicilar (kullanici_adi, ad_soyad, rol, parola_hash, tuz, "
+                "aktif, olusturma) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                (kullanici_adi, ad_soyad, rol, ozet, tuz, time.time()),
+            )
+    except sqlite3.IntegrityError:
+        raise KullaniciVar(kullanici_adi) from None
+    return kullanici_getir(kullanici_adi)
+
+
+def kullanici_getir(kullanici_adi, hassas=False):
+    """Kullanıcı sözlüğü ya da None. hassas=True yalnızca parola doğrulaması için."""
+    alanlar = "*" if hassas else _KULLANICI_ALANLARI
+    with baglanti() as conn:
+        satir = conn.execute(f"SELECT {alanlar} FROM kullanicilar WHERE kullanici_adi = ?",
+                             ((kullanici_adi or "").strip().lower(),)).fetchone()
+    return dict(satir) if satir else None
+
+
+def kullanicilari_listele():
+    with baglanti() as conn:
+        satirlar = conn.execute(
+            f"SELECT {_KULLANICI_ALANLARI} FROM kullanicilar ORDER BY kullanici_adi").fetchall()
+    return [dict(s) for s in satirlar]
+
+
+def kullanici_sayisi():
+    with baglanti() as conn:
+        return conn.execute("SELECT COUNT(*) FROM kullanicilar").fetchone()[0]
+
+
+def kullanici_guncelle(kullanici_adi, rol=None, ad_soyad=None, aktif=None, yeni_parola=None):
+    """
+    Verilen alanları günceller. Dönen değer (sonuç, veri):
+      ("yok", None)        kullanıcı bulunamadı
+      ("son_admin", None)  son aktif admin pasif yapılamaz / operatöre düşürülemez
+      ("tamam", kullanici) güncellendi (hash/tuz yok)
+    Son admin kontrolü ve güncelleme aynı yazma işleminde yapılır.
+    """
+    atamalar, degerler = [], []
+    if rol is not None:
+        atamalar.append("rol = ?")
+        degerler.append(_rol_kontrol(rol))
+    if ad_soyad is not None:
+        atamalar.append("ad_soyad = ?")
+        degerler.append(_ad_soyad_duzelt(ad_soyad))
+    if aktif is not None:
+        atamalar.append("aktif = ?")
+        degerler.append(1 if aktif else 0)
+    if yeni_parola is not None:
+        ozet, tuz = parola_ozeti(parola_kontrol(yeni_parola))
+        atamalar += ["parola_hash = ?", "tuz = ?"]
+        degerler += [ozet, tuz]
+    kullanici_adi = (kullanici_adi or "").strip().lower()
+
+    with baglanti() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        satir = conn.execute("SELECT rol, aktif FROM kullanicilar WHERE kullanici_adi = ?",
+                             (kullanici_adi,)).fetchone()
+        if satir is None:
+            return "yok", None
+        admin_kalmiyor = (satir["rol"] == "admin" and satir["aktif"]
+                          and (rol == "operator" or aktif is False))
+        if admin_kalmiyor and conn.execute(
+                "SELECT COUNT(*) FROM kullanicilar WHERE rol = 'admin' AND aktif = 1"
+        ).fetchone()[0] <= 1:
+            return "son_admin", None
+        if atamalar:
+            conn.execute(f"UPDATE kullanicilar SET {', '.join(atamalar)} WHERE kullanici_adi = ?",
+                         (*degerler, kullanici_adi))
+    return "tamam", kullanici_getir(kullanici_adi)
+
+
+def kullanici_sil(kullanici_adi):
+    """Kullanıcıyı ve giriş kayıtlarını siler (yalnızca scriptler; API'de silme yok)."""
+    kullanici_adi = (kullanici_adi or "").strip().lower()
+    with baglanti() as conn:
+        k = conn.execute("DELETE FROM kullanicilar WHERE kullanici_adi = ?",
+                         (kullanici_adi,)).rowcount
+        g = conn.execute("DELETE FROM giris_kayitlari WHERE kullanici_adi = ?",
+                         (kullanici_adi,)).rowcount
+    return k, g
+
+
+def son_giris_yaz(kullanici_adi, zaman=None):
+    with baglanti() as conn:
+        conn.execute("UPDATE kullanicilar SET son_giris = ? WHERE kullanici_adi = ?",
+                     (zaman or time.time(), kullanici_adi))
+
+
+def giris_kaydet(kullanici_adi, ip, basarili):
+    """Denetim kaydı. Kullanıcı adı denemede yazılan biçimiyle (kısaltılmış) saklanır."""
+    with baglanti() as conn:
+        conn.execute(
+            "INSERT INTO giris_kayitlari (zaman, kullanici_adi, ip, basarili) VALUES (?, ?, ?, ?)",
+            (time.time(), (kullanici_adi or "").strip().lower()[:64], ip, 1 if basarili else 0),
         )

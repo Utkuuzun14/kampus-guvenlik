@@ -112,5 +112,14 @@ export const DURUM_EYLEM = {
   cozuldu: "Çöz",
 };
 
-// Operatör adı bu tarayıcıda hatırlanır
-export const OPERATOR_ANAHTAR = "kg_operator";
+// Oturum (token + kullanıcı) bu anahtarla sessionStorage / localStorage'da tutulur
+export const OTURUM_ANAHTAR = "kg_oturum";
+// Eski panel operatör adını burada hatırlıyordu; artık kullanılmıyor, açılışta silinir
+export const ESKI_OPERATOR_ANAHTAR = "kg_operator";
+
+// Roller (docs/SOZLESMELER.md §9)
+export const ROLLER = ["admin", "operator"];
+export const ROL_AD = {
+  admin: "Admin",
+  operator: "Operatör",
+};

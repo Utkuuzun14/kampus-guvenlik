@@ -1,12 +1,15 @@
 # Test Sonuçları (Rapor Tablo 6)
 
 Test tarihi: 12 Ekim 2026, 15:39 (otomatik test scripti ile, T1-T8 tek çalıştırma)
-Son çalıştırma: 15 Ekim 2026, 13:55 (T1-T11 tek çalıştırma, hepsi başarılı; aynı
-backend açıkken tekrarında da T1-T11 başarılı)
+Son çalıştırma: 15 Ekim 2026, 14:49 (T1-T12 tek çalıştırma, hepsi başarılı; 14:37 ve
+14:49'da aynı backend açıkken art arda iki kez)
 Yöntem: scripts/test_senaryolari.py — her senaryo broker'a kontrollü mesaj
 gönderir, backend API'sinden (T9'da ayrıca PATCH ve WebSocket, T11'de mod uçları
-ve WebSocket) sonuç doğrulanır. Script başta güvenlik modunu mesai_disi yapar
-(hareket = orta) ve sonunda kullanıcının önceki moduna geri alır.
+ve WebSocket, T12'de giriş/yetki uçları) sonuç doğrulanır. Script başta güvenlik
+modunu mesai_disi yapar (hareket = orta) ve sonunda kullanıcının önceki moduna (ve
+"değiştiren" kaydına) geri alır. API korumalı olduğundan başta rastgele adlı ve
+parolalı geçici bir admin ve operatör oluşturulur; istekler admin token'ıyla, durum
+geçişleri operatör token'ıyla yapılır; sonda bu kullanıcılar ve giriş kayıtları silinir.
 Ortam: Mosquitto broker + FastAPI backend + SQLite (sahte üreteç kapalı,
 e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfırlandı
 (yedek: backend/yedekler/kampus_20261012_1538.db); olay id'leri bu yüzden küçüktür.
@@ -22,9 +25,10 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
 | T6 | Bildirim (e-posta) | alev=1, hareket=1, duman=2500, alev 0→1 (iki kez) | kritik/yüksekte mail, orta/bilgide yok, bekleme süresinde tekrar yok | 8/8 kontrol geçti (SMTP taklit) | BAŞARILI |
 | T7 | LWT ile çevrimdışı ve geri gelme | online → socket kapatma (DISCONNECT yok) → yeniden bağlanma | /api/dugumler'de çevrimdışı, sonra çevrimiçi | LWT 0,1 sn'de yansıdı, geri bağlanınca anında çevrimiçi | BAŞARILI |
 | T8 | Histerezis (alarm fırtınası önleme) | duman 2100, 2500, 2900, 2300, 1900 → 1700 → 1500; alev 1, 1 → 0 | tek yüksek olay, ölü bantta olay yok, 1600 altında tek bilgi; alev sürerken olay yok, sönünce tek bilgi | 5/5 adım beklenen olay sayısıyla | BAŞARILI |
-| T9 | Olay yaşam döngüsü (alarm onaylama) — 15 Ekim 2026 | hareket=1 → PATCH goruldu → PATCH cozuldu → geri/aynı geçiş, hatalı gövdeler | durum=yeni; ileri geçişler 200; atlanan adım zamanı dolu; geri 409; olmayan id 404; geçersiz gövde 422; WS olay_guncelleme; istatistik değer döner | 12/12 kontrol geçti | BAŞARILI |
+| T9 | Olay yaşam döngüsü (alarm onaylama) — 15 Ekim 2026, kimlik doğrulamayla uyarlandı | hareket=1 → operatör token'ıyla PATCH goruldu (gövdede sahte onaylayan) → PATCH cozuldu → geri/aynı geçiş, hatalı gövdeler | durum=yeni; ileri geçişler 200; atlanan adım zamanı dolu; kim/onaylayan = token sahibi, gövdedeki onaylayan yok sayılır; geri 409; olmayan id 404; geçersiz durum ve 301 karakter not 422; WS olay_guncelleme; istatistik değer döner | 13/13 kontrol geçti | BAŞARILI |
 | T10 | Yangın teyidi (korelasyon) — 15 Ekim 2026 | duman 2500 → 2 sn → alev=1; yangın sürerken duman 2900, alev 1→0→1; normale dönüş → yeniden yangın; ters sıra (alev → 2 sn → duman); kural fonksiyonu birim testi | tek yangin_teyit (kritik), iliskili = [duman, alev]; sürerken yeni teyit yok; normalden sonra yeni teyit; ters sırada teyit; pencere dışında (11 sn) teyit yok; mail konusu "YANGIN TEYİTLİ" | 12/12 kontrol geçti | BAŞARILI |
 | T11 | Güvenlik modu ve zamana bağlı hareket kuralı — 15 Ekim 2026 | PUT mesai / mesai_disi / gece + her birinde hareket=1; PUT "tatil" ve boş gövde; hareket_seviyesi("otomatik", t) birim testi | mesai → bilgi (otomatik çözülmüş), mesai_disi → orta, gece → yuksek; WS "mod" mesajı; geçersiz → 422; hafta içi 10:00 bilgi, 20:00 orta, 02:00 yüksek, cumartesi 11:00 orta | 10/10 kontrol geçti (saat eşlemesi 9/9 vaka) | BAŞARILI |
+| T12 | Kimlik doğrulama ve yetkilendirme — 15 Ekim 2026 | token'sız / sahte imzalı / süresi dolmuş istek; yanlış parola, olmayan kullanıcı, pasif kullanıcı; 6 hatalı giriş; operatör ve admin ile PUT mod, /api/kullanicilar; admin kendini pasif yapma; operatör PATCH durum; WS token'sız / bozuk / geçerli | 401 (genel mesaj); 429 + Retry-After; operatör 403, admin 200 + degistiren; 409; kim = operatörün adı; WS 4401; /api/saglik 200; hiçbir yanıtta parola özeti yok | 18/18 kontrol geçti | BAŞARILI |
 
 ## Notlar
 - Testler test_dugum düğümü ile yapıldı; çalışma sonunda bu düğümün kayıtları
@@ -104,6 +108,45 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
   - Elle seçilen mod saatten bağımsız (mesai/mesai_disi/gece → bilgi/orta/yuksek).
   - Çalışma sonunda mod kullanıcının önceki değerine (otomatik) geri alındı.
   - Temizlik: olaylar 30, olay_adimlari 2, sensor_gecmis 42 kayıt silindi.
+- T9 uyarlaması (15 Ekim 2026, kimlik doğrulama): `onaylayan` artık token'dan geldiği
+  için "boş onaylayan" ve "41 karakter onaylayan → 422" kontrolleri, "gövdedeki
+  onaylayan yok sayılıyor" kontrolüne dönüştü: gövdede "Sahte Kişi" gönderildi,
+  `olay_adimlari.kim` ve `onaylayan` = geçici operatörün adı ("Test Operatör …").
+  durum=xyz, durum=yeni ve 301 karakter not yine 422.
+- T12 (15 Ekim 2026, 14:49): geçici kullanıcılar `t_admin_<6 hex>` / `t_op_<6 hex>`,
+  parolalar `secrets.token_urlsafe` ile rastgele. Doğrulananlar:
+  - `/api/saglik` token'sız 200; `/api/olaylar` token'sız 401 ("Giriş yapılmamış")
+  - başka bir anahtarla imzalanmış ve rolü "admin" yazılmış token → 401
+  - yanlış parola ve olmayan kullanıcı → ikisi de 401 ve aynı mesaj
+    ("Kullanıcı adı veya parola hatalı")
+  - ayrı, rastgele bir kullanıcı adıyla 5 hatalı deneme 401, 6. deneme 429,
+    `Retry-After: 60` (test operatörü kilitlenmesin diye ayrı ad)
+  - pasif yapılan kullanıcı doğru parolayla 401
+  - operatör PUT mod → 403 ve mod değişmedi; admin PUT mod → 200,
+    `degistiren` = admin adı; operatörün açık WS bağlantısına gelen `mod` mesajı
+    da `degistiren` taşıdı
+  - `/api/kullanicilar` operatör 403, admin 200; admin kendini pasif yapamaz 409;
+    7 karakterlik parolayla kullanıcı ekleme 422
+  - son aktif admin kuralı (operatöre düşürme ve pasif yapma → `son_admin`) geçici
+    bir veritabanında birim testle (canlı DB'de başka admin olabileceği için)
+  - operatör PATCH cozuldu (gövdede sahte onaylayan) → `olay_adimlari.kim` =
+    operatörün adı
+  - süresi dolmuş token **canlı backend'e karşı**: `.env`'deki `JWT_GIZLI_ANAHTAR`
+    ile süreç içinde imzalanan geçerli token 200 aldı (anahtarın backend'le aynı
+    olduğu kanıtı), aynı kullanıcı için `exp` 60 sn önce olan token 401
+  - WS token'sız ve bozuk token → kapanış kodu 4401; geçerli token → bağlantı açık
+  - testteki 87 API yanıt gövdesinin hiçbirinde `"parola_hash"`, `"tuz"` ya da
+    geçici parolalar yok
+  - Temizlik: olaylar 31, olay_adimlari 3, sensor_gecmis 43 kayıt; 2 geçici
+    kullanıcı ve 3 giriş kaydı silindi; mod ve "değiştiren" kaydı eski haline döndü.
+- Not (15 Ekim 2026, 14:35): ilk T1-T12 çalıştırmasında T8 ve T10 başarısız oldu.
+  Neden kod değil ortamdı: backend yeniden başlatılırken eski `--reload`
+  sürecinin yetim worker'ı açık kalmış, iki backend aynı MQTT client_id
+  ("kampus-backend") ile broker'da birbirini düşürüyordu; bellekteki histerezis
+  ve korelasyon durumu iki süreç arasında bölündü. Yetim süreç kapatılınca T1-T12
+  iki ardışık çalıştırmada da başarılı oldu.
+- Göç (15 Ekim 2026, kimlik doğrulama): backend açılışta `kullanicilar` ve
+  `giris_kayitlari` tablolarını oluşturdu; mevcut olaylar değişmedi.
 - Göç (15 Ekim 2026, akıllı kurallar): backend yeniden yüklenince olaylar tablosuna `kural` ve
   `iliskili` kolonları eklendi (ALTER TABLE, mevcut kayıtlar NULL), `ayarlar` tablosu
   oluşturuldu; mevcut olaylar değişmedi.

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { API, CEVRIMDISI_SANIYE } from "../sabitler";
+import { CEVRIMDISI_SANIYE } from "../sabitler";
+import { apiJson } from "../api";
 
 // Tek kaynak: /api/dugumler. Düğüm listesi, konum adı, çevrimiçi durumu ve SON
 // ÖLÇÜMLER (PIR, MQ-2, Alev) yalnızca buradan gelir; gösterge, harita detay
@@ -8,15 +9,6 @@ import { API, CEVRIMDISI_SANIYE } from "../sabitler";
 // useDumanSerisi ile çekilir ve son noktası bu son ölçüme hizalanır.
 const YENILEME_MS = 3000;
 const DUMAN_SERI = 40; // ~2 dk (3 sn aralık)
-
-async function jsonGetir(yol) {
-  try {
-    const cevap = await fetch(`${API}${yol}`);
-    return cevap.ok ? await cevap.json() : null;
-  } catch {
-    return null;
-  }
-}
 
 // /api/dugumler satırı → panel düğüm nesnesi
 const donustur = (d) => ({
@@ -37,7 +29,7 @@ export default function useDugumler(simdiSn) {
   useEffect(() => {
     let iptal = false;
     const getir = async () => {
-      const veri = await jsonGetir("/api/dugumler");
+      const veri = await apiJson("/api/dugumler");
       if (iptal || !Array.isArray(veri)) return;
       const yeni = veri.map(donustur);
       setListe(yeni);
@@ -71,7 +63,7 @@ export function useDumanSerisi(dugum, sonOlcum) {
     if (!dugum) return;
     let iptal = false;
     const getir = async () => {
-      const veri = await jsonGetir(
+      const veri = await apiJson(
         `/api/gecmis?sensor=duman&dugum=${encodeURIComponent(dugum)}&limit=${DUMAN_SERI}`
       );
       if (!iptal && Array.isArray(veri)) setSeri({ dugum, veri });

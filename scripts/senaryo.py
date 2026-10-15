@@ -11,6 +11,9 @@ karışmaz. Üreteç çalışmıyorsa yangın ve hareket senaryoları yine çal�
     python scripts/senaryo.py hareket dugum2   # izinsiz giriş: art arda hareket (seviye moda göre)
     python scripts/senaryo.py hareket dugum2 --mod gece   # modu gece yapar (yüksek), sonra geri alır
     python scripts/senaryo.py kopma dugum3     # LWT ile düşer, 30 sn sonra geri gelir
+
+--mod API'ye giriş yapar: backend/.env'de SENARYO_KULLANICI ve SENARYO_PAROLA
+(admin rolünde bir kullanıcı) tanımlı olmalı. MQTT senaryoları giriş istemez.
 """
 import argparse
 import json
@@ -34,14 +37,50 @@ API = "http://127.0.0.1:8000"
 MODLAR = ("otomatik", "mesai", "mesai_disi", "gece")
 
 
-def mod_istek(mod=None):
-    """mod=None: GET, verilirse PUT /api/ayarlar/mod. Yanıt gövdesi (dict)."""
-    veri = None if mod is None else json.dumps({"mod": mod}).encode("utf-8")
-    istek = urllib.request.Request(f"{API}/api/ayarlar/mod", data=veri,
-                                   method="GET" if mod is None else "PUT",
-                                   headers={"Content-Type": "application/json"})
+class GirisHatasi(Exception):
+    """--mod için API girişi yapılamadı; mesaj kullanıcıya gösterilir."""
+
+
+def _json_istek(yol, yontem="GET", govde=None, token=None):
+    basliklar = {"Content-Type": "application/json"}
+    if token:
+        basliklar["Authorization"] = f"Bearer {token}"
+    veri = None if govde is None else json.dumps(govde).encode("utf-8")
+    istek = urllib.request.Request(f"{API}{yol}", data=veri, method=yontem, headers=basliklar)
     with urllib.request.urlopen(istek, timeout=5) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+def giris_tokeni():
+    """backend/.env'deki SENARYO_KULLANICI / SENARYO_PAROLA ile giriş yapar."""
+    kullanici = os.getenv("SENARYO_KULLANICI", "").strip()
+    parola = os.getenv("SENARYO_PAROLA", "")
+    if not kullanici or not parola:
+        raise GirisHatasi("--mod için backend/.env'e şunları ekle (admin rolünde bir kullanıcı):\n"
+                          "    SENARYO_KULLANICI=<kullanıcı adı>\n"
+                          "    SENARYO_PAROLA=<parola>\n"
+                          "Kullanıcı yoksa: python scripts/kullanici_ekle.py")
+    try:
+        return _json_istek("/api/giris", "POST",
+                           {"kullanici_adi": kullanici, "parola": parola})["token"]
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise GirisHatasi("Çok fazla hatalı giriş denemesi; 1 dk sonra tekrar deneyin.") from None
+        raise GirisHatasi(f"Giriş başarısız (HTTP {e.code}): SENARYO_KULLANICI / SENARYO_PAROLA "
+                          "hatalı ya da kullanıcı pasif.") from None
+
+
+def mod_istek(token, mod=None):
+    """mod=None: GET, verilirse PUT /api/ayarlar/mod. Yanıt gövdesi (dict)."""
+    try:
+        if mod is None:
+            return _json_istek("/api/ayarlar/mod", token=token)
+        return _json_istek("/api/ayarlar/mod", "PUT", {"mod": mod}, token)
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise GirisHatasi("SENARYO_KULLANICI admin değil; modu yalnızca admin "
+                              "değiştirebilir (HTTP 403).") from None
+        raise
 
 
 def baglan():
@@ -151,11 +190,15 @@ def main():
     if arg.mod and arg.senaryo != "hareket":
         ap.error("--mod yalnızca hareket senaryosunda kullanılır")
 
-    onceki_mod = None
+    onceki_mod = token = None
     if arg.mod:
         try:
-            onceki_mod = mod_istek()["mod"]
-            bilgi = mod_istek(arg.mod)
+            token = giris_tokeni()
+            onceki_mod = mod_istek(token)["mod"]
+            bilgi = mod_istek(token, arg.mod)
+        except GirisHatasi as e:
+            print(f"[senaryo] {e}")
+            return 1
         except (urllib.error.URLError, OSError) as e:
             print(f"[senaryo] Güvenlik modu ayarlanamadı ({e}). Backend çalışıyor mu?")
             return 1
@@ -179,9 +222,9 @@ def main():
         client.loop_stop()
         if onceki_mod:
             try:
-                mod_istek(onceki_mod)
+                mod_istek(token, onceki_mod)
                 print(f"[senaryo] Güvenlik modu geri alındı: {onceki_mod}")
-            except (urllib.error.URLError, OSError) as e:
+            except (GirisHatasi, urllib.error.URLError, OSError) as e:
                 print(f"[senaryo] Mod geri alınamadı ({e}); panelden {onceki_mod} seçin.")
     if sonuc == 0:
         print("[senaryo] tamamlandı.")

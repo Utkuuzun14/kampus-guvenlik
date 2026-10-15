@@ -223,7 +223,7 @@ Her durum geçişi bir satır; zaman çizelgesindeki kim + not + saat buradan ge
 | `id` | INTEGER PK | otomatik artan |
 | `olay_id` | INTEGER | `olaylar.id` |
 | `durum` | TEXT | geçilen durum (`goruldu` / `mudahale` / `cozuldu`) |
-| `kim` | TEXT | operatör adı |
+| `kim` | TEXT | adımı yapan kullanıcı: token sahibinin `ad_soyad`'ı, yoksa `kullanici_adi` (§9) |
 | `not_metni` | TEXT NULL | adım notu |
 | `zaman` | REAL | sunucu saati |
 
@@ -238,6 +238,37 @@ mevcut veriye dokunulmaz. `scripts/db_sifirla.py` bu tabloyu boşaltmaz.
 |-------|-----|----------|
 | `anahtar` | TEXT PK | ör. `guvenlik_modu` |
 | `deger` | TEXT | ör. `otomatik` |
+
+Kullanılan anahtarlar: `guvenlik_modu`, `guvenlik_modu_degistiren` (modu en son
+değiştiren adminin görünen adı), `guvenlik_modu_zaman` (epoch, sunucu saati).
+
+### Tablo: `kullanicilar`
+Panel kullanıcıları (§9). Tablo yoksa açılışta oluşturulur; `scripts/db_sifirla.py`
+bu tabloyu **silmez**.
+
+| Sütun | Tip | Açıklama |
+|-------|-----|----------|
+| `id` | INTEGER PK | otomatik artan |
+| `kullanici_adi` | TEXT UNIQUE | küçük harf, `^[a-z0-9._-]{3,32}$` |
+| `ad_soyad` | TEXT NULL | zaman çizelgesinde ve "değiştiren" alanında görünen ad (≤ 60) |
+| `rol` | TEXT | `admin` \| `operator` (CHECK) |
+| `parola_hash` | TEXT | scrypt özeti (hex); **API'de asla dönmez** |
+| `tuz` | TEXT | kullanıcıya özel 16 baytlık rastgele tuz (hex); **API'de asla dönmez** |
+| `aktif` | INTEGER | 1/0; pasif kullanıcı giriş yapamaz, eski token'ı da geçersizdir |
+| `olusturma` | REAL | sunucu saati |
+| `son_giris` | REAL NULL | son başarılı giriş |
+
+### Tablo: `giris_kayitlari`
+Giriş denetim kaydı: başarılı ve başarısız her deneme (kilitliyken gelenler dahil).
+`scripts/db_sifirla.py` bu tabloyu boşaltır.
+
+| Sütun | Tip | Açıklama |
+|-------|-----|----------|
+| `id` | INTEGER PK | otomatik artan |
+| `zaman` | REAL | sunucu saati |
+| `kullanici_adi` | TEXT | denemede yazılan ad (küçük harfe çevrilmiş, ≤ 64) |
+| `ip` | TEXT | istemci IP'si |
+| `basarili` | INTEGER | 1/0 |
 
 ### Tablo: `sensor_gecmis`
 Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için faydalı.
@@ -255,6 +286,10 @@ Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için f
 ## 6. Backend API sözleşmesi (React'in kullanacağı)
 
 ### REST uç noktaları
+`/api/saglik` ve `/api/giris` dışındaki **tüm** uçlar `Authorization: Bearer <token>`
+ister; yoksa/bozuksa/süresi dolmuşsa 401, rol yetmiyorsa 403 (§9).
+
+- `POST /api/giris`, `GET /api/ben`, `/api/kullanicilar` → kimlik ve kullanıcı yönetimi (§9)
 - `GET /api/olaylar?limit=50` → son olaylar (JSON dizi). `&durum=acik` yalnızca
   çözülmemişleri (`durum != cozuldu`) döndürür; başka değer 422.
 - `GET /api/olaylar/{id}` → tek olay + `adimlar` dizisi (eski → yeni); yoksa 404
@@ -264,7 +299,7 @@ Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için f
 - `GET /api/durum` → dugum1 durumu ve duman eşiği (`esik_duman`); eski uç, geriye uyumluluk için
 - `GET /api/dugumler` → bilinen tüm düğümler (aşağıda)
 - `GET /api/gecmis?sensor=duman&dugum=dugum1&limit=50` → bir sensörün son ham okumaları (eski → yeni)
-- `GET /api/saglik` → `{"durum": "calisiyor", "mqtt": "bagli" | "kopuk"}`.
+- `GET /api/saglik` (token istemez) → `{"durum": "calisiyor", "mqtt": "bagli" | "kopuk"}`.
   `mqtt`, backend'in broker bağlantısıdır; paneldeki "Broker" ışığı buna bakar.
   Tek bir düğümün kopması bu değeri etkilemez.
 
@@ -291,8 +326,11 @@ Düğüm listesi = `config.DUGUM_KONUMLARI` (hiç veri göndermemiş olsa da) +
 - `konum`: tanımsız düğümde `null`.
 
 ### WebSocket
-- `WS /ws` → backend, yeni bir olay/alarm oluştuğunda bu kanaldan React'e
-  anında JSON gönderir. React canlı güncellenir.
+- `WS /ws?token=<token>` → backend, yeni bir olay/alarm oluştuğunda bu kanaldan React'e
+  anında JSON gönderir. React canlı güncellenir. Token yoksa/geçersizse bağlantı
+  kabul edilip hemen **4401** koduyla kapatılır (panel giriş ekranına döner, yeniden
+  bağlanmayı denemez). Token yalnızca bağlanırken denetlenir. Uvicorn loglarında
+  `token=` değeri `***` ile maskelenir.
 
 WebSocket mesaj formatı:
 ```json
@@ -313,7 +351,8 @@ Güvenlik modu değiştiğinde (`PUT /api/ayarlar/mod`) ya da otomatik modda etk
 mod saatle değiştiğinde (backend 30 sn'de bir kontrol eder, ör. 23:00'te gece
 başlar) tüm bağlı istemcilere:
 ```json
-{ "tip": "mod", "veri": { "mod": "otomatik", "etkin_mod": "gece", "aciklama": "..." } }
+{ "tip": "mod", "veri": { "mod": "otomatik", "etkin_mod": "gece", "aciklama": "...",
+                         "degistiren": "Ayşe K.", "degistirme_zaman": 1792063534.57 } }
 ```
 
 ### 6.1 Olay yaşam döngüsü (alarm onaylama)
@@ -334,20 +373,23 @@ olarak oluşur. `bilgi` ve `uyari` olaylar oluşurken `cozuldu` yazılır
   Yalnızca ileri; ara adım atlanabilir. Geri ya da aynı duruma geçiş → 409.
 ```
 
-**`PATCH /api/olaylar/{id}/durum`**
+**`PATCH /api/olaylar/{id}/durum`** (operatör ve admin, §9)
 ```json
-{ "durum": "goruldu", "onaylayan": "Ayşe K.", "not": "Kamera 3 kontrol ediliyor" }
+{ "durum": "goruldu", "not": "Kamera 3 kontrol ediliyor" }
 ```
 - `durum`: `goruldu` | `mudahale` | `cozuldu` (zorunlu)
-- `onaylayan`: boşluklar kırpıldıktan sonra 1-40 karakter (zorunlu)
 - `not`: en fazla 300 karakter (isteğe bağlı)
+- `onaylayan`: **token'dan gelir** (`ad_soyad`, yoksa `kullanici_adi`); hem
+  `olaylar.onaylayan`'a hem `olay_adimlari.kim`'e yazılır. Eski istemciler için
+  gövdede `onaylayan` alanı hâlâ kabul edilir ama **yok sayılır** (doğrulanmaz).
 
 | Kod | Ne zaman | Gövde |
 |-----|----------|-------|
 | 200 | geçiş yapıldı | güncel olay + `adimlar` |
 | 404 | olay yok | `{"detail": "Olay bulunamadı"}` |
 | 409 | hedef mevcut durumdan ileri değil | `{"detail": "...", "mevcut": "cozuldu"}` |
-| 422 | geçersiz `durum`, eksik/uzun `onaylayan`, uzun `not` | FastAPI doğrulama hatası |
+| 401 | token yok/geçersiz | `{"detail": "..."}` |
+| 422 | geçersiz `durum`, uzun `not` | FastAPI doğrulama hatası |
 
 Geçişte hedef duruma kadar boş kalan tüm `*_zaman` alanları **aynı sunucu
 anıyla** doldurulur (ör. `yeni → cozuldu`: üçü de aynı an). `onaylayan` ve
@@ -377,21 +419,27 @@ Başarılı geçişten sonra `olay_guncelleme` WS mesajı yayınlanır.
 **`GET /api/ayarlar/mod`**
 ```json
 { "mod": "otomatik", "etkin_mod": "gece",
-  "aciklama": "Otomatik · şu an gece (23:00–06:00) · hareket = yuksek" }
+  "aciklama": "Otomatik · şu an gece (23:00–06:00) · hareket = yuksek",
+  "degistiren": "Ayşe K.", "degistirme_zaman": 1792063534.57 }
 ```
 - `mod`: kayıtlı mod; `etkin_mod`: o an geçerli olan (otomatikte saate göre,
   diğerlerinde `mod` ile aynı); `aciklama`: panel ipucu için kısa metin.
+- `degistiren` / `degistirme_zaman`: modu en son değiştiren adminin görünen adı ve
+  sunucu saati; mod hiç değiştirilmediyse `null`.
 
-**`PUT /api/ayarlar/mod`**
+**`PUT /api/ayarlar/mod`** (yalnızca admin)
 ```json
 { "mod": "gece" }
 ```
 | Kod | Ne zaman | Gövde |
 |-----|----------|-------|
 | 200 | kaydedildi | GET ile aynı biçim |
+| 401 | token yok/geçersiz | `{"detail": "..."}` |
+| 403 | kullanıcı admin değil (mod değişmez) | `{"detail": "Bu işlem için admin yetkisi gerekli"}` |
 | 422 | `mod` eksik ya da `otomatik/mesai/mesai_disi/gece` dışında | FastAPI doğrulama hatası |
 
-Değer değiştiyse WS `{"tip": "mod"}` yayınlanır; aynı değer tekrar gönderilirse yayın yok.
+Değer değiştiyse `degistiren`/`degistirme_zaman` güncellenir ve WS `{"tip": "mod"}`
+yayınlanır; aynı değer tekrar gönderilirse ikisi de olmaz.
 
 ---
 
@@ -401,6 +449,17 @@ Değer değiştiyse WS `{"tip": "mod"}` yayınlanır; aynı değer tekrar gönde
 - Geliştirme sonrası **TLS** (şifreli MQTT) eklenecek — rapor 2.6 ile uyumlu.
 - QoS 1: kritik mesajların en az bir kez ulaşması garanti.
 - LWT: kart ani kopunca broker otomatik "offline" yayınlar.
+- **Panel girişi (§9):** parolalar `hashlib.scrypt` (n=2¹⁴, r=8, p=1) ve
+  kullanıcıya özel 16 baytlık tuzla saklanır; karşılaştırma `hmac.compare_digest`
+  ile sabit zamanlıdır. Parola hiçbir yerde loglanmaz, hiçbir yanıtta dönmez.
+- **Oturum:** JWT (HS256, PyJWT), anahtar `JWT_GIZLI_ANAHTAR` (`backend/.env`).
+  Rol her istekte veritabanından okunur (RBAC: admin / operatör); token'daki rol
+  yalnızca bilgi amaçlıdır.
+- **Kaba kuvvet koruması:** aynı kullanıcı adı + IP için 5 hatalı denemeden sonra
+  60 sn kilit (429); kullanıcı yokken de aynı süren scrypt hesabı yapılır.
+  Her deneme `giris_kayitlari`'na yazılır (denetim kaydı).
+- **CORS:** yalnızca paneli sunan adresler (`CORS_KAYNAKLAR`; varsayılan
+  `localhost`/`127.0.0.1` :5173 ve :5174), `*` kullanılmaz.
 
 ---
 
@@ -429,3 +488,90 @@ Kod: `backend/app/bildirim.py`, ayarlar: `backend/.env` (şablon: `backend/.env.
 - **Gizlilik:** parola ve adresler yalnızca `backend/.env`'de durur (git'e girmez).
   Gmail için normal parola değil, 16 haneli **uygulama şifresi** kullanılır.
 - **Elle doğrulama:** `python scripts/eposta_test.py` örnek bir kritik mail gönderir.
+
+---
+
+## 9. Kimlik doğrulama ve yetkilendirme
+
+Kod: `backend/app/kimlik.py` (token + FastAPI bağımlılıkları), kullanıcı tabloları §5.
+İlk admin: `python scripts/kullanici_ekle.py` (etkileşimli; koda gömülü kullanıcı/parola yok).
+Kullanıcı yoksa backend açılışta `Henüz kullanıcı yok: python scripts/kullanici_ekle.py` uyarısı basar.
+
+### Roller ve yetki matrisi
+
+| Uç / işlem | Token'sız | Operatör | Admin |
+|---|---|---|---|
+| `GET /api/saglik`, `POST /api/giris` | ✓ | ✓ | ✓ |
+| `GET /api/ben` | 401 | ✓ | ✓ |
+| Tüm okuma uçları (`/api/olaylar*`, `/api/dugumler`, `/api/gecmis`, `/api/durum`, `/api/istatistik/mudahale`, `GET /api/ayarlar/mod`) | 401 | ✓ | ✓ |
+| `PATCH /api/olaylar/{id}/durum` (alarm ilerletme) | 401 | ✓ | ✓ |
+| `WS /ws?token=` | 4401 | ✓ | ✓ |
+| `PUT /api/ayarlar/mod` (güvenlik modu) | 401 | **403** | ✓ |
+| `GET/POST /api/kullanicilar`, `PATCH /api/kullanicilar/{ad}` | 401 | **403** | ✓ |
+
+### Token akışı
+
+```
+ Panel                         Backend                              SQLite
+   │  POST /api/giris            │                                    │
+   │  {kullanici_adi, parola} ──▶│ kilit? (ad+IP, 5 hata → 60 sn) ─429│
+   │                             │ scrypt(parola, tuz) == parola_hash?│◀── kullanicilar
+   │                             │ giris_kayitlari'na yaz ───────────▶│
+   │◀── {token, kullanici} ──────│ JWT HS256 {sub, rol, ad, iat, exp} │
+   │                             │                                    │
+   │  GET /api/... + Bearer ────▶│ imza + exp doğrula → kullanıcıyı   │
+   │                             │ DB'den oku (aktif? rol?) ─────────▶│
+   │◀── 200 / 401 / 403 ─────────│                                    │
+   │  WS /ws?token=... ─────────▶│ aynı doğrulama; geçersizse 4401    │
+```
+
+- **İçerik:** `sub` (kullanici_adi), `rol`, `ad` (görünen ad), `iat`, `exp`.
+  Süre `TOKEN_SURE_SAAT` (varsayılan 8 saat).
+- **Anahtar:** `JWT_GIZLI_ANAHTAR` (`backend/.env`). Yoksa açılışta rastgele üretilir
+  ve uyarı basılır: backend her yeniden başladığında (`--reload` dahil) tüm oturumlar düşer.
+- **Rol kaynağı:** her istekte veritabanı. Pasif yapılan ya da rolü değişen
+  kullanıcının mevcut token'ı bir sonraki istekte buna göre değerlendirilir.
+- **Panel:** token `sessionStorage`'da, "Beni hatırla" işaretliyse `localStorage`'da
+  (`kg_oturum`). Herhangi bir 401 ya da WS 4401 oturumu temizler ve giriş ekranına döner.
+
+### Uçlar
+
+**`POST /api/giris`**
+```json
+{ "kullanici_adi": "ayse", "parola": "••••••••" }
+```
+```json
+{ "token": "eyJhbGciOi...", "kullanici": { "kullanici_adi": "ayse", "ad_soyad": "Ayşe K.", "rol": "operator" } }
+```
+Kullanıcı adı büyük/küçük harf ve baştaki/sondaki boşluklardan bağımsızdır.
+
+**`GET /api/ben`** → `{ "kullanici_adi", "ad_soyad", "rol" }` (rol veritabanından).
+
+**`GET /api/kullanicilar`** (admin) → `[{ id, kullanici_adi, ad_soyad, rol, aktif, olusturma, son_giris }]`
+— `parola_hash` ve `tuz` hiçbir yanıtta yer almaz.
+
+**`POST /api/kullanicilar`** (admin) → 201 + kullanıcı
+```json
+{ "kullanici_adi": "mehmet", "ad_soyad": "Mehmet Y.", "rol": "operator", "parola": "en-az-8-karakter" }
+```
+
+**`PATCH /api/kullanicilar/{ad}`** (admin) — verilen alanlar güncellenir:
+```json
+{ "rol": "admin", "ad_soyad": "Mehmet Y.", "aktif": false, "yeni_parola": "..." }
+```
+
+### Hata kodları
+
+| Kod | Ne zaman | Gövde |
+|-----|----------|-------|
+| 401 | Token yok / bozuk / imzası yanlış / süresi dolmuş / kullanıcı pasif. `POST /api/giris`'te: kullanıcı yok, parola yanlış ya da kullanıcı pasif — **hangisi olduğu söylenmez** | `{"detail": "Kullanıcı adı veya parola hatalı"}` (girişte), `WWW-Authenticate: Bearer` |
+| 403 | Geçerli token ama rol yetmiyor (operatör → mod / kullanıcı yönetimi) | `{"detail": "Bu işlem için admin yetkisi gerekli"}` |
+| 404 | `PATCH /api/kullanicilar/{ad}`: kullanıcı yok | `{"detail": "Kullanıcı bulunamadı"}` |
+| 409 | Kullanıcı adı alınmış; admin kendini pasif yapmaya çalışıyor; son aktif admin pasif yapılmak ya da operatöre düşürülmek isteniyor | `{"detail": "..."}` |
+| 422 | Kullanıcı adı `^[a-z0-9._-]{3,32}$`'e uymuyor, parola 8–128 karakter değil, geçersiz rol | `{"detail": "..."}` |
+| 429 | Aynı kullanıcı adı + IP'den 5 hatalı denemeden sonra 60 sn (kilit sürerken parola doğru olsa da) | `{"detail": "Çok fazla hatalı deneme. N sn sonra tekrar deneyin.", "kalan_sn": N}`, `Retry-After: N` |
+| WS 4401 | `/ws` token'sız ya da geçersiz token'la açıldı | kapanış nedeni `Oturum geçersiz` |
+
+Kaba kuvvet sayacı bellektedir (backend yeniden başlayınca sıfırlanır); başarılı giriş
+sayacı sıfırlar. Kilit, kullanıcı adı + IP çiftine özeldir: aynı IP'den başka bir
+kullanıcı adıyla giriş etkilenmez.

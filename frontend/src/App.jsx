@@ -12,12 +12,14 @@ import IsiHaritasi from "./components/IsiHaritasi";
 import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
 import OlayDetay from "./components/OlayDetay";
+import GirisEkrani from "./components/GirisEkrani";
+import Kullanicilar from "./components/Kullanicilar";
 import useDugumler, { useDumanSerisi } from "./hooks/useDugumler";
 import { useMudahaleIstatistigi, olayGetir } from "./hooks/useOlayDurumu";
 import useGuvenlikModu from "./hooks/useGuvenlikModu";
-import {
-  API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, haritadaMi,
-} from "./sabitler";
+import useOturum from "./hooks/useOturum";
+import { apiFetch, oturumDusur, wsAdresi, WS_YETKISIZ } from "./api";
+import { ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, haritadaMi } from "./sabitler";
 import {
   seviyeAnahtari, tehditHesapla, pencereIcinde, acikMi, bantOlayi, olayGuncelle, tehditteMi,
 } from "./hesaplar";
@@ -25,7 +27,16 @@ import {
 const ANALITIK_LIMIT = 1000;
 const ACIK_LIMIT = 200;
 
+// Oturum yoksa giriş ekranı, varsa panel. Kullanıcı değişince panel sıfırdan kurulur.
 function App() {
+  const { oturum, giris, cikis } = useOturum();
+  if (!oturum) return <GirisEkrani onGiris={giris} />;
+  return <Panel key={oturum.kullanici.kullanici_adi} kullanici={oturum.kullanici} onCikis={cikis} />;
+}
+
+function Panel({ kullanici, onCikis }) {
+  const admin = kullanici.rol === "admin";
+  const [kullanicilarAcik, setKullanicilarAcik] = useState(false);
   const [olaylar, setOlaylar] = useState([]);
   const [analitik, setAnalitik] = useState([]); // ısı haritası, özet kartları vb. için geniş liste
   const [hata, setHata] = useState(null);
@@ -65,7 +76,7 @@ function App() {
   // Başlangıçta geçmiş olayları REST ile çek
   const olaylariGetir = async () => {
     try {
-      const cevap = await fetch(`${API}/api/olaylar?limit=50`);
+      const cevap = await apiFetch(`/api/olaylar?limit=50`);
       if (!cevap.ok) throw new Error("Sunucu hatası: " + cevap.status);
       const veri = await cevap.json();
       setOlaylar(veri);
@@ -80,7 +91,7 @@ function App() {
   // Analitik için daha geniş olay listesi (dakikada bir yenilenir)
   const analitikGetir = async () => {
     try {
-      const cevap = await fetch(`${API}/api/olaylar?limit=${ANALITIK_LIMIT}`);
+      const cevap = await apiFetch(`/api/olaylar?limit=${ANALITIK_LIMIT}`);
       if (!cevap.ok) throw new Error("Sunucu hatası: " + cevap.status);
       setAnalitik(await cevap.json());
       setDbDurum("ok");
@@ -92,7 +103,7 @@ function App() {
   // Açık alarmlar: alarm bandı ve "Açık alarm" kartı (eski açık alarmlar da dahil)
   const acikGetir = async () => {
     try {
-      const cevap = await fetch(`${API}/api/olaylar?durum=acik&limit=${ACIK_LIMIT}`);
+      const cevap = await apiFetch(`/api/olaylar?durum=acik&limit=${ACIK_LIMIT}`);
       if (cevap.ok) setAcikAlarmlar(await cevap.json());
     } catch {
       // sessiz geç
@@ -101,7 +112,7 @@ function App() {
 
   const durumGetir = async () => {
     try {
-      const cevap = await fetch(`${API}/api/durum`);
+      const cevap = await apiFetch(`/api/durum`);
       if (cevap.ok) setDurum(await cevap.json());
     } catch {
       // sessiz geç
@@ -110,7 +121,7 @@ function App() {
 
   const saglikGetir = async () => {
     try {
-      const cevap = await fetch(`${API}/api/saglik`);
+      const cevap = await apiFetch(`/api/saglik`);
       setApiDurum(cevap.ok ? "ok" : "hata");
       const saglik = cevap.ok ? await cevap.json() : null;
       setMqttDurum(saglik?.mqtt === "bagli" ? "ok" : saglik?.mqtt === "kopuk" ? "hata" : "bekliyor");
@@ -123,7 +134,7 @@ function App() {
   // WebSocket bağlantısı kur (canlı olaylar)
   const wsBaglan = (kapatildiRef) => {
     try {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(wsAdresi());
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -151,8 +162,13 @@ function App() {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (kapanis) => {
         setBaglanti("kopuk");
+        // Token geçersiz/süresi dolmuş: yeniden denemek yerine giriş ekranına dön
+        if (kapanis.code === WS_YETKISIZ) {
+          oturumDusur();
+          return;
+        }
         if (!kapatildiRef.value) {
           yenidenBaglanRef.current = setTimeout(
             () => wsBaglan(kapatildiRef),
@@ -262,10 +278,11 @@ function App() {
 
   return (
     <div className="kabuk">
-      <SolMenu />
+      <SolMenu admin={admin} onKullanicilar={() => setKullanicilarAcik(true)} />
 
       <div className="icerik">
-        <UstBar simdi={simdi} tehdit={tehdit} isiklar={isiklar} baglanti={baglanti} mod={mod} />
+        <UstBar simdi={simdi} tehdit={tehdit} isiklar={isiklar} baglanti={baglanti} mod={mod}
+          kullanici={kullanici} onCikis={onCikis} />
 
         {bant.olay && (
           <AlarmBandi
@@ -327,6 +344,10 @@ function App() {
             onGuncellendi={guncellemeUygula}
             onIliskili={iliskiliAc}
           />
+        )}
+
+        {admin && kullanicilarAcik && (
+          <Kullanicilar ben={kullanici} onKapat={() => setKullanicilarAcik(false)} />
         )}
 
         <footer className="altbilgi">
