@@ -139,6 +139,34 @@ Her anlamlı olay (alarm dahil) buraya bir satır olarak yazılır.
 | `mesaj` | TEXT | insan-okur açıklama ("Alev algılandı") |
 | `zaman` | INTEGER | Unix zaman damgası |
 | `olusturma` | DATETIME | DB kayıt zamanı (varsayılan now) |
+| `durum` | TEXT | `yeni` / `goruldu` / `mudahale` / `cozuldu` (varsayılan `yeni`, §6.1) |
+| `onaylayan` | TEXT NULL | son durum adımını yapan operatör (`sistem` = otomatik) |
+| `goruldu_zaman` | REAL NULL | sunucu saati (epoch, ondalıklı) |
+| `mudahale_zaman` | REAL NULL | sunucu saati |
+| `cozuldu_zaman` | REAL NULL | sunucu saati |
+| `not_metni` | TEXT NULL | son adımın notu |
+
+Durum kolonları kayıpsız göçle eklenir: backend açılışta `PRAGMA table_info`
+ile eksik kolonları bulur ve yalnızca onları `ALTER TABLE ADD COLUMN` ile ekler
+(tablo silinmez, idempotent). Kolonlar ilk kez eklendiğinde mevcut kayıtlar bir
+kez kapatılır: `bilgi`/`uyari` → `cozuldu` (`onaylayan='sistem'`), `orta+` →
+`cozuldu` (`onaylayan='sistem (göç)'`, `olay_adimlari`'na tek bir `cozuldu` adımı).
+
+### Tablo: `olay_adimlari`
+Her durum geçişi bir satır; zaman çizelgesindeki kim + not + saat buradan gelir.
+`olaylar`'daki `onaylayan` / `not_metni` yalnızca son adımı tutar.
+
+| Sütun | Tip | Açıklama |
+|-------|-----|----------|
+| `id` | INTEGER PK | otomatik artan |
+| `olay_id` | INTEGER | `olaylar.id` |
+| `durum` | TEXT | geçilen durum (`goruldu` / `mudahale` / `cozuldu`) |
+| `kim` | TEXT | operatör adı |
+| `not_metni` | TEXT NULL | adım notu |
+| `zaman` | REAL | sunucu saati |
+
+Ara adım atlanırsa (ör. `yeni → cozuldu`) yalnızca hedef adım için satır yazılır;
+atlanan adımın `*_zaman` alanı aynı anla dolar, panel onu "atlandı" gösterir.
 
 ### Tablo: `sensor_gecmis`
 Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için faydalı.
@@ -156,7 +184,11 @@ Ham sensör okumaları (grafik/trend için). Opsiyonel ama trend analizi için f
 ## 6. Backend API sözleşmesi (React'in kullanacağı)
 
 ### REST uç noktaları
-- `GET /api/olaylar?limit=50` → son olaylar (JSON dizi)
+- `GET /api/olaylar?limit=50` → son olaylar (JSON dizi). `&durum=acik` yalnızca
+  çözülmemişleri (`durum != cozuldu`) döndürür; başka değer 422.
+- `GET /api/olaylar/{id}` → tek olay + `adimlar` dizisi (eski → yeni); yoksa 404
+- `PATCH /api/olaylar/{id}/durum` → durum ilerletme (§6.1)
+- `GET /api/istatistik/mudahale` → müdahale istatistiği (§6.1)
 - `GET /api/durum` → dugum1 durumu ve duman eşiği (`esik_duman`); eski uç, geriye uyumluluk için
 - `GET /api/dugumler` → bilinen tüm düğümler (aşağıda)
 - `GET /api/gecmis?sensor=duman&dugum=dugum1&limit=50` → bir sensörün son ham okumaları (eski → yeni)
@@ -194,6 +226,71 @@ WebSocket mesaj formatı:
 ```json
 { "tip": "olay", "veri": { ...olay nesnesi... } }
 ```
+Olay nesnesine durum alanları (`durum`, `onaylayan`, `*_zaman`, `not_metni`)
+**eklendi**; `tip` ve mevcut alanlar aynı kaldı, eski istemciler etkilenmez.
+
+Durum değiştiğinde (§6.1) tüm bağlı istemcilere:
+```json
+{ "tip": "olay_guncelleme", "veri": { ...güncel olay nesnesi, "adimlar": [...] } }
+```
+Panel, listelerdeki olayı `id` ile bulup yerinde günceller (sayfa yenilemeden,
+açık tüm sekmelerde).
+
+### 6.1 Olay yaşam döngüsü (alarm onaylama)
+
+Yalnızca `orta`, `yuksek`, `kritik` olaylar operatör akışına girer ve `yeni`
+olarak oluşur. `bilgi` ve `uyari` olaylar oluşurken `cozuldu` yazılır
+(`onaylayan='sistem'`), listeyi kirletmez.
+
+```
+  ┌──────┐     ┌─────────┐     ┌──────────┐     ┌─────────┐
+  │ yeni │────▶│ goruldu │────▶│ mudahale │────▶│ cozuldu │
+  └──────┘     └─────────┘     └──────────┘     └─────────┘
+     │  │           │                 ▲            ▲   ▲
+     │  │           └─────────────────┼────────────┘   │   goruldu → cozuldu
+     │  └─────────────────────────────┘                │   yeni → mudahale
+     └─────────────────────────────────────────────────┘   yeni → cozuldu
+
+  Yalnızca ileri; ara adım atlanabilir. Geri ya da aynı duruma geçiş → 409.
+```
+
+**`PATCH /api/olaylar/{id}/durum`**
+```json
+{ "durum": "goruldu", "onaylayan": "Ayşe K.", "not": "Kamera 3 kontrol ediliyor" }
+```
+- `durum`: `goruldu` | `mudahale` | `cozuldu` (zorunlu)
+- `onaylayan`: boşluklar kırpıldıktan sonra 1-40 karakter (zorunlu)
+- `not`: en fazla 300 karakter (isteğe bağlı)
+
+| Kod | Ne zaman | Gövde |
+|-----|----------|-------|
+| 200 | geçiş yapıldı | güncel olay + `adimlar` |
+| 404 | olay yok | `{"detail": "Olay bulunamadı"}` |
+| 409 | hedef mevcut durumdan ileri değil | `{"detail": "...", "mevcut": "cozuldu"}` |
+| 422 | geçersiz `durum`, eksik/uzun `onaylayan`, uzun `not` | FastAPI doğrulama hatası |
+
+Geçişte hedef duruma kadar boş kalan tüm `*_zaman` alanları **aynı sunucu
+anıyla** doldurulur (ör. `yeni → cozuldu`: üçü de aynı an). `onaylayan` ve
+`not_metni` son adımı tutar; adımın kendisi `olay_adimlari`'na yazılır.
+UPDATE mevcut duruma koşulludur: iki sekme aynı anda basarsa biri 409 alır.
+Başarılı geçişten sonra `olay_guncelleme` WS mesajı yayınlanır.
+
+**`GET /api/istatistik/mudahale`**
+```json
+{ "acik_sayisi": 3, "ort_gorulme_sn": 42.5, "ort_cozum_sn": 380.1, "cozulen_sayisi": 7 }
+```
+- `acik_sayisi`: zamandan bağımsız **tüm** çözülmemiş `orta+` olaylar
+- `ort_gorulme_sn` / `ort_cozum_sn`: son 24 saatte oluşan `orta+` olaylarda
+  `goruldu_zaman − zaman` / `cozuldu_zaman − zaman` ortalaması; veri yoksa `null`
+- `cozulen_sayisi`: son 24 saatte oluşup çözülen `orta+` olay sayısı
+- Göçte kapatılan kayıtlar (`onaylayan='sistem (göç)'`) ortalamaya katılmaz.
+
+> **Saat kayması notu:** olayın `zaman`'ı cihazın (ESP32) saatidir, `*_zaman`
+> alanları sunucu saatidir. Cihaz saati kayarsa süreler sapar. Cihaz saati
+> ileri giderse süre negatif çıkar; **negatif süreli kayıt ortalamaya katılmaz**
+> (sayılarda yer alır). Sahte üreteç ve test scripti sunucu saatini kullandığı
+> için bu durum yalnızca gerçek donanımda görülebilir; firmware'de NTP ile saat
+> eşitlemesi önerilir.
 
 ---
 

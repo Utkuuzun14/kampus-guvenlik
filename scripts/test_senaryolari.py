@@ -1,11 +1,13 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T8).
+Test senaryoları scripti (rapor Tablo 6, T1-T9).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
 işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
 göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
 T7, test_dugum için LWT'li bir client açıp socket'ini temiz olmayan şekilde
 kapatır ve /api/dugumler'de çevrimdışı düşüp geri geldiğini doğrular.
 T8, duman/alev histerezisini doğrular (art arda eşik üstü ölçüm → tek olay).
+T9, olay yaşam döngüsünü doğrular: PATCH /api/olaylar/{id}/durum ile ileri
+geçişler, geri gitmede 409, WebSocket olay_guncelleme ve /api/istatistik/mudahale.
 Backend histerezis durumunu bellekte tuttuğu için testler başta test_dugum'u
 normale çeker; böylece aynı backend açıkken tekrar çalıştırmak da tutarlıdır.
 
@@ -16,7 +18,7 @@ KAPATILMALI (test sonuçlarını kirletmemesi için).
     python scripts/test_senaryolari.py
 
 Çalışma bitince (testler başarısız olsa bile) bu çalıştırmada oluşan
-test_dugum kayıtları olaylar ve sensor_gecmis tablolarından silinir.
+test_dugum kayıtları olaylar, olay_adimlari ve sensor_gecmis tablolarından silinir.
 """
 import json
 import time
@@ -24,9 +26,11 @@ import sys
 import os
 import sqlite3
 import threading
+import urllib.error
 import urllib.request
 
 import paho.mqtt.client as mqtt
+from websockets.sync.client import connect as ws_baglan  # uvicorn bağımlılığı, venv'de var
 
 BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
 sys.path.insert(0, BACKEND_DIZINI)
@@ -34,6 +38,7 @@ from app import config  # noqa: E402
 import sahte_veri  # noqa: E402  (aynı dizin: LWT'li client ve kopma fonksiyonu)
 
 API = "http://127.0.0.1:8000"
+WS_URL = "ws://127.0.0.1:8000/ws"
 DUGUM = "test_dugum"
 TABLOLAR = ("olaylar", "sensor_gecmis")
 
@@ -56,6 +61,12 @@ def test_verisini_temizle(baslangic):
     conn = sqlite3.connect(db_yolu())
     try:
         silinen = {}
+        # Önce silinecek olayların durum adımları (tablo eski DB'de olmayabilir)
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'olay_adimlari'").fetchone():
+            silinen["olay_adimlari"] = conn.execute(
+                "DELETE FROM olay_adimlari WHERE olay_id IN "
+                "(SELECT id FROM olaylar WHERE dugum = ? AND id > ?)",
+                (DUGUM, baslangic["olaylar"])).rowcount
         for t in TABLOLAR:
             imlec = conn.execute(f"DELETE FROM {t} WHERE dugum = ? AND id > ?",
                                  (DUGUM, baslangic[t]))
@@ -64,7 +75,8 @@ def test_verisini_temizle(baslangic):
     finally:
         conn.close()
     print(f"\nTemizlik: {DUGUM} kayıtları silindi "
-          f"(olaylar: {silinen['olaylar']}, sensor_gecmis: {silinen['sensor_gecmis']})")
+          f"(olaylar: {silinen['olaylar']}, olay_adimlari: {silinen.get('olay_adimlari', 0)}, "
+          f"sensor_gecmis: {silinen['sensor_gecmis']})")
 
 
 def mqtt_baglan():
@@ -332,6 +344,126 @@ def test_lwt():
     return basarili
 
 
+def api_istek(yol, yontem="GET", govde=None):
+    """(HTTP kodu, JSON gövde). Hata kodları da istisna atmadan döner."""
+    veri = None if govde is None else json.dumps(govde).encode("utf-8")
+    istek = urllib.request.Request(f"{API}{yol}", data=veri, method=yontem,
+                                   headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(istek, timeout=5) as r:
+            return r.status, json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read().decode("utf-8") or "null")
+
+
+def ws_mesaj_bekle(ws, kosul, sure=3.0):
+    """Koşulu sağlayan ilk WS mesajı (yoksa None); diğer mesajlar atlanır."""
+    bitis = time.monotonic() + sure
+    while (kalan := bitis - time.monotonic()) > 0:
+        try:
+            mesaj = json.loads(ws.recv(timeout=kalan))
+        except TimeoutError:
+            return None
+        if kosul(mesaj):
+            return mesaj
+    return None
+
+
+def test_yasam_dongusu(client, baslangic):
+    """
+    T9: Alarm onaylama ve olay yaşam döngüsü (yeni → goruldu → mudahale → cozuldu).
+    Hareket alarmı üretilir, panelin PATCH çağrıları taklit edilir; bir WS
+    istemcisi olay_guncelleme yayınını dinler.
+    """
+    print("\n[T9] Alarm onaylama / olay yaşam döngüsü")
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(bool(kosul))
+
+    def durum_patch(olay_id, govde):
+        return api_istek(f"/api/olaylar/{olay_id}/durum", "PATCH", govde)
+
+    try:
+        onceki_id = son_olay_id()
+        yayinla(client, "hareket", 1)
+        time.sleep(1.5)
+        olay = next((o for o in yeni_olaylar(onceki_id)
+                     if o["sensor"] == "hareket" and o["seviye"] == "orta"), None)
+        kontrol(f"hareket alarmı oluştu, durum=yeni "
+                f"(#{olay['id'] if olay else '-'}, {olay.get('durum') if olay else '-'})",
+                olay and olay.get("durum") == "yeni" and olay.get("onaylayan") is None)
+        if not olay:
+            raise Exception("alarm oluşmadı, kalan adımlar atlandı")
+        oid = olay["id"]
+
+        with ws_baglan(WS_URL, open_timeout=5) as ws:
+            kod, v = durum_patch(oid, {"durum": "goruldu", "onaylayan": "T9 Operatör",
+                                       "not": "Kamera kontrol ediliyor"})
+            kontrol(f"PATCH goruldu → {kod}, goruldu_zaman dolu",
+                    kod == 200 and v["durum"] == "goruldu" and v["goruldu_zaman"]
+                    and v["mudahale_zaman"] is None)
+            mesaj = ws_mesaj_bekle(ws, lambda m: m.get("tip") == "olay_guncelleme"
+                                   and m["veri"].get("id") == oid)
+            kontrol("WebSocket olay_guncelleme mesajı geldi (durum=goruldu)",
+                    mesaj and mesaj["veri"]["durum"] == "goruldu")
+
+        kod, v = durum_patch(oid, {"durum": "cozuldu", "onaylayan": "T9 Operatör"})
+        kontrol(f"PATCH cozuldu → {kod}, atlanan mudahale_zaman = cozuldu_zaman",
+                kod == 200 and v["durum"] == "cozuldu" and v["cozuldu_zaman"]
+                and v["mudahale_zaman"] == v["cozuldu_zaman"]
+                and v["goruldu_zaman"] < v["cozuldu_zaman"])
+        adimlar = v.get("adimlar", []) if kod == 200 else []
+        kontrol(f"olay_adimlari: {[(a['durum'], a['kim'], a['not_metni']) for a in adimlar]}",
+                [a["durum"] for a in adimlar] == ["goruldu", "cozuldu"]
+                and adimlar[0]["kim"] == "T9 Operatör"
+                and adimlar[0]["not_metni"] == "Kamera kontrol ediliyor")
+
+        kod, v = durum_patch(oid, {"durum": "goruldu", "onaylayan": "T9 Operatör"})
+        kontrol(f"geri gitme (cozuldu → goruldu) → {kod}, mevcut={v.get('mevcut')}",
+                kod == 409 and v.get("mevcut") == "cozuldu")
+        kod, _ = durum_patch(oid, {"durum": "cozuldu", "onaylayan": "T9 Operatör"})
+        kontrol(f"aynı duruma geçiş (cozuldu → cozuldu) → {kod}", kod == 409)
+
+        kod, _ = durum_patch(10 ** 9, {"durum": "cozuldu", "onaylayan": "T9 Operatör"})
+        kontrol(f"olmayan id → {kod}", kod == 404)
+        hatalilar = [
+            ("durum=xyz", {"durum": "xyz", "onaylayan": "T9"}),
+            ("durum=yeni", {"durum": "yeni", "onaylayan": "T9"}),
+            ("boş onaylayan", {"durum": "goruldu", "onaylayan": "   "}),
+            ("41 karakter onaylayan", {"durum": "goruldu", "onaylayan": "x" * 41}),
+            ("301 karakter not", {"durum": "goruldu", "onaylayan": "T9", "not": "x" * 301}),
+        ]
+        kodlar = {ad: durum_patch(oid, g)[0] for ad, g in hatalilar}
+        kontrol(f"geçersiz gövde → 422 {kodlar}", all(k == 422 for k in kodlar.values()))
+
+        _, acik = api_istek("/api/olaylar?durum=acik&limit=500")
+        kontrol("?durum=acik: çözülen olay listede yok, listede çözülmüş kayıt yok",
+                all(o["id"] != oid and o["durum"] != "cozuldu" for o in acik))
+
+        _, liste = api_istek("/api/olaylar?limit=200")
+        bilgi = [o for o in liste if o["dugum"] == DUGUM and o["id"] > baslangic["olaylar"]
+                 and o["seviye"] == "bilgi"]
+        kontrol(f"bilgi olayları otomatik çözüldü ({len(bilgi)} olay, onaylayan=sistem)",
+                bilgi and all(o["durum"] == "cozuldu" and o["onaylayan"] == "sistem"
+                              for o in bilgi))
+
+        kod, ist = api_istek("/api/istatistik/mudahale")
+        kontrol(f"/api/istatistik/mudahale → {kod} {ist}",
+                kod == 200 and ist["cozulen_sayisi"] >= 1
+                and isinstance(ist["ort_cozum_sn"], (int, float))
+                and isinstance(ist["ort_gorulme_sn"], (int, float))
+                and isinstance(ist["acik_sayisi"], int))
+    except Exception as e:
+        print(f"    ✗ hata: {e}")
+        kontroller.append(False)
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
 def main():
     print("=" * 60)
     print("KAMPÜS GÜVENLİK SİSTEMİ - TEST SENARYOLARI (Tablo 6)")
@@ -341,14 +473,14 @@ def main():
     baslangic = son_kayit_idleri()
     client = mqtt_baglan()
     try:
-        testleri_calistir(client)
+        testleri_calistir(client, baslangic)
     finally:
         client.loop_stop()
         client.disconnect()
         test_verisini_temizle(baslangic)
 
 
-def testleri_calistir(client):
+def testleri_calistir(client, baslangic):
     time.sleep(1)
     normale_cek(client)
 
@@ -389,12 +521,13 @@ def testleri_calistir(client):
 
     sonuclar.append(("T6", "Bildirim (e-posta)", test_bildirim()))
     sonuclar.append(("T7", "LWT: çevrimdışı ve geri gelme", test_lwt()))
+    sonuclar.append(("T9", "Olay yaşam döngüsü (onaylama)", test_yasam_dongusu(client, baslangic)))
 
     # Özet
     print("\n" + "=" * 60)
     print("ÖZET")
     print("=" * 60)
-    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8"]
+    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
     for no, ad, sonuc in sorted(sonuclar, key=lambda x: sira.index(x[0])):
         if sonuc is True:
             durum = "BAŞARILI"

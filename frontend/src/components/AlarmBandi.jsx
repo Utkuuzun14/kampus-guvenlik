@@ -1,10 +1,13 @@
 import { SENSOR_AD } from "../sabitler";
-import { cumleDuzeni, saatBicim } from "../hesaplar";
+import { cumleDuzeni, durumu, saatBicim, seviyeAnahtari } from "../hesaplar";
+import DurumRozeti from "./DurumRozeti";
+import DurumIlerlet from "./DurumIlerlet";
 
-// Son 5 dakikadaki kritik olay için alarm bandı. Onay yalnızca arayüzde gizler.
-// konumlar: { dugum: konum adı } (/api/dugumler)
-export default function AlarmBandi({ olay, konumlar, onOnayla }) {
+// Çözülmemiş en ağır kritik/yüksek olay için alarm bandı; olay çözülünce kaybolur.
+// adet: bant kapsamındaki açık alarm sayısı. konumlar: { dugum: konum adı } (/api/dugumler)
+export default function AlarmBandi({ olay, adet, konumlar, onGuncellendi, onDetay }) {
   const konum = konumlar[olay.dugum];
+  const kritik = seviyeAnahtari(olay.seviye) === "kritik";
 
   return (
     <div role="alert" className="alarm-bandi">
@@ -17,20 +20,22 @@ export default function AlarmBandi({ olay, konumlar, onOnayla }) {
       </div>
       <div className="alarm-metin">
         <div className="alarm-ust">
-          <span className="alarm-etiket yanip">● KRİTİK ALARM</span>
+          <span className={durumu(olay) === "yeni" ? "alarm-etiket yanip" : "alarm-etiket"}>
+            ● {kritik ? "KRİTİK" : "YÜKSEK"} ALARM
+          </span>
           <span className="alarm-saat">{saatBicim(olay.zaman)}</span>
+          {durumu(olay) !== "yeni" && <DurumRozeti olay={olay} />}
+          {adet > 1 && <span className="alarm-saat">+{adet - 1} açık alarm</span>}
         </div>
-        <div className="alarm-baslik">
+        <button type="button" className="alarm-baslik metin-btn" onClick={() => onDetay(olay)}>
           {cumleDuzeni(olay.mesaj)}
           {konum && ` — ${konum}`}
-        </div>
+        </button>
         <div className="alarm-detay">
           {olay.dugum} · {SENSOR_AD[olay.sensor] ?? olay.sensor} · değer {olay.deger}
         </div>
       </div>
-      <button type="button" className="alarm-onay" onClick={onOnayla}>
-        Alarmı onayla
-      </button>
+      <DurumIlerlet olay={olay} onGuncellendi={onGuncellendi} anaSinif="alarm-onay" />
     </div>
   );
 }

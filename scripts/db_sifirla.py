@@ -4,7 +4,7 @@ Veritabanı sıfırlama aracı (sunum öncesi temiz başlangıç).
 1. backend/kampus.db'nin yedeğini alır: backend/yedekler/kampus_YYYYMMDD_HHMM.db
    (SQLite yedekleme API'si; backend açıkken de tutarlı bir kopya üretir)
 2. Tablo başına kayıt sayılarını gösterir, "EVET" yazılmasını ister
-3. olaylar ve sensor_gecmis tablolarını boşaltır, id sayaçlarını sıfırlar,
+3. olaylar, olay_adimlari ve sensor_gecmis tablolarını boşaltır, id sayaçlarını sıfırlar,
    VACUUM yapar. Tablo yapısına (sütunlar, indeksler) dokunmaz.
 
 Backend açıkken de çalıştırılabilir: veritabanı o an kilitliyse birkaç kez
@@ -27,7 +27,8 @@ BACKEND_DIZINI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", 
 sys.path.insert(0, BACKEND_DIZINI)
 from app import config  # noqa: E402
 
-TABLOLAR = ("olaylar", "sensor_gecmis")
+# olay_adimlari eski veritabanında henüz olmayabilir (backend açılışta oluşturur)
+TABLOLAR = ("olaylar", "olay_adimlari", "sensor_gecmis")
 DENEME = 5          # kilitliyse kaç kez denensin
 BEKLEME_SN = 2      # denemeler arası bekleme
 KILIT_SURESI = 5    # her bağlantının kilidi bekleme süresi (sqlite3 timeout)
@@ -63,8 +64,15 @@ def tekrar_dene(ad, islem):
             time.sleep(BEKLEME_SN)
 
 
+def mevcut_tablolar(conn):
+    return [t for t in TABLOLAR
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                            (t,)).fetchone()]
+
+
 def sayilar(conn):
-    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in TABLOLAR}
+    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            for t in mevcut_tablolar(conn)}
 
 
 def yedek_al(yol):
@@ -91,11 +99,12 @@ def bosalt(yol):
         conn = baglan(yol)
         try:
             conn.execute("BEGIN IMMEDIATE")  # yazma kilidini baştan al
-            for t in TABLOLAR:
+            tablolar = mevcut_tablolar(conn)
+            for t in tablolar:
                 conn.execute(f"DELETE FROM {t}")
             # AUTOINCREMENT sayaçları: yeni kayıtlar 1'den başlasın
-            conn.execute(f"DELETE FROM sqlite_sequence WHERE name IN ({','.join('?' * len(TABLOLAR))})",
-                         TABLOLAR)
+            conn.execute(f"DELETE FROM sqlite_sequence WHERE name IN ({','.join('?' * len(tablolar))})",
+                         tablolar)
             conn.execute("COMMIT")
         except Exception:
             if conn.in_transaction:
@@ -116,7 +125,7 @@ def bosalt(yol):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="olaylar ve sensor_gecmis tablolarını yedekleyip boşaltır")
+    ap = argparse.ArgumentParser(description="olaylar, olay_adimlari ve sensor_gecmis tablolarını yedekleyip boşaltır")
     ap.add_argument("--evet", action="store_true", help="onay sormadan çalış")
     arg = ap.parse_args()
 

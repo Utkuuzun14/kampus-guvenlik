@@ -58,6 +58,19 @@ a:focus-visible {
 
 .mono { font-family: var(--font-mono); }
 
+/* Metin gibi görünen buton (olay başlığı → detay). Font sonraki kurallarca ezilebilsin diye burada */
+.metin-btn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metin-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
+
 /* ---------- Animasyonlar ---------- */
 
 @keyframes yesil {
@@ -516,7 +529,8 @@ a:focus-visible {
 
 .ozet {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  /* 5 kart 1280px'te tek satıra sığsın */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
 }
 
@@ -795,7 +809,7 @@ a:focus-visible {
 
 .olay-tablo {
   width: 100%;
-  min-width: 760px;
+  min-width: 920px;
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -847,6 +861,12 @@ a:focus-visible {
 .rozet-yuksek { --rozet-renk: var(--sev-yuksek); }
 .rozet-kritik { --rozet-renk: var(--sev-kritik); }
 .rozet-bilinmeyen { --rozet-renk: var(--sev-bilinmeyen); }
+
+/* Olay durumu rozetleri */
+.rozet-durum-yeni { --rozet-renk: var(--hata); }
+.rozet-durum-goruldu { --rozet-renk: var(--uyari); }
+.rozet-durum-mudahale { --rozet-renk: var(--vurgu); }
+.rozet-durum-cozuldu { --rozet-renk: var(--ok); }
 
 /* ---------- Panel kartları (harita, gösterge, akış) ---------- */
 
@@ -1262,6 +1282,179 @@ a:focus-visible {
   font-weight: 600;
 }
 
+/* ---------- Olay durumu: butonlar, onay penceresi, detay ---------- */
+
+.akis-durum,
+.tablo-durum,
+.durum-eylemler {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.akis-durum { margin-top: 6px; gap: 8px; }
+.tablo-durum { gap: 8px; }
+
+.durum-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--vurgu);
+  background: color-mix(in srgb, var(--vurgu) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vurgu) 40%, transparent);
+}
+
+.durum-btn:hover { background: color-mix(in srgb, var(--vurgu) 22%, transparent); }
+
+.durum-btn.ikincil {
+  color: var(--metin-ikincil);
+  background: transparent;
+  border-color: #24324f;
+}
+
+.durum-btn.ikincil:hover { color: var(--metin); border-color: var(--kenar-belirgin); }
+
+/* Dokunmatik ekranda en az 44px hedef */
+@media (pointer: coarse) {
+  .durum-btn { min-height: 44px; }
+}
+
+/* Alarm bandında butonlar bandın renginde */
+.alarm-bandi .durum-eylemler { position: relative; gap: 8px; }
+
+.alarm-bandi .durum-btn.ikincil {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+  color: #ffe4e6;
+  border-color: rgba(244, 63, 94, 0.55);
+}
+
+.alarm-bandi .durum-btn.ikincil:hover { background: rgba(244, 63, 94, 0.18); }
+
+.alarm-bandi .alarm-baslik { display: block; }
+
+/* Onay penceresi ve olay detayı: native <dialog> (odak içeride, Esc kapatır) */
+.durum-dialog,
+.olay-detay {
+  color: var(--metin);
+  background: var(--kart-koyu);
+  border: 1px solid var(--kenar-belirgin);
+  border-radius: 16px;
+  padding: 20px;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.olay-detay { width: min(560px, calc(100vw - 32px)); }
+
+.olay-detay[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.durum-dialog::backdrop,
+.olay-detay::backdrop {
+  background: rgba(5, 9, 18, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.durum-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.durum-alan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--metin-ikincil);
+}
+
+.durum-alan input,
+.durum-alan textarea {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--metin);
+  background: var(--kart);
+  border: 1px solid var(--kenar-belirgin);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+  resize: vertical;
+}
+
+.durum-alan input:focus-visible,
+.durum-alan textarea:focus-visible {
+  outline: 2px solid var(--vurgu);
+  outline-offset: 1px;
+}
+
+.durum-hata {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.45);
+}
+
+.durum-dugmeler {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filtre-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.olay-detay-ust {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.olay-detay-rozetler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.olay-detay-alt {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.zaman-cizelgesi {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.zc-atlandi .akis-ad { color: var(--metin-ikincil); }
+.zc-bekliyor .akis-ad { color: var(--metin-sonuk); }
+
+.zc-not {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--metin-ikincil);
+  overflow-wrap: anywhere;
+}
+
 /* ---------- Alt bilgi ---------- */
 
 .altbilgi {
@@ -1291,6 +1484,8 @@ a:focus-visible {
 
 @media (max-width: 1279px) {
   .ozet { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 5. kart (Açık alarm) tek kalırsa satırı doldurur */
+  .ozet > .ozet-kart:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .satir-2 { grid-template-columns: minmax(0, 1fr); }
 
   .harita-satiri { grid-template-columns: minmax(0, 1fr); }
@@ -1341,6 +1536,12 @@ a:focus-visible {
   .saat-kutu { align-items: flex-start; margin-left: 0; }
 
   .alarm-onay { width: 100%; }
+  .alarm-bandi .durum-eylemler { width: 100%; }
+  .alarm-bandi .durum-eylemler > * { flex: 1 1 auto; }
+
+  .durum-dialog,
+  .olay-detay { padding: 16px; }
+  .durum-dugmeler > * { flex: 1 1 auto; }
 
   /* Detay kartı haritayı kapatmasın: altına iner */
   .dugum-detay {

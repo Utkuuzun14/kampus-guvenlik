@@ -1,16 +1,20 @@
 """
 FastAPI ana uygulaması.
 - Açılışta veritabanını kurar ve MQTT dinleyiciyi arka planda başlatır.
-- REST uçları: /api/olaylar, /api/durum, /api/dugumler, /api/gecmis, /api/saglik
-- WebSocket /ws: yeni olayları bağlı istemcilere canlı iletir.
+- REST uçları: /api/olaylar, /api/olaylar/{id}, PATCH /api/olaylar/{id}/durum,
+  /api/istatistik/mudahale, /api/durum, /api/dugumler, /api/gecmis, /api/saglik
+- WebSocket /ws: yeni olayları ve durum güncellemelerini bağlı istemcilere canlı iletir.
 """
 import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, StringConstraints
 
 from app import config, veritabani, mqtt_dinleyici
 
@@ -81,8 +85,50 @@ def saglik():
 
 
 @app.get("/api/olaylar")
-def olaylar(limit: int = 50):
-    return veritabani.son_olaylar(limit)
+def olaylar(limit: int = 50, durum: Literal["acik"] | None = None):
+    """durum=acik: yalnızca çözülmemiş olaylar (durum != cozuldu)."""
+    return veritabani.son_olaylar(limit, sadece_acik=durum == "acik")
+
+
+@app.get("/api/olaylar/{olay_id}")
+def olay(olay_id: int):
+    """Tek olay ve durum adımları (zaman çizelgesi için)."""
+    kayit = veritabani.olay_getir(olay_id)
+    if kayit is None:
+        raise HTTPException(404, "Olay bulunamadı")
+    return kayit
+
+
+class DurumIstegi(BaseModel):
+    durum: Literal["goruldu", "mudahale", "cozuldu"]
+    onaylayan: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+    not_: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] | None = Field(
+        None, alias="not")
+
+
+@app.patch("/api/olaylar/{olay_id}/durum")
+async def olay_durum(olay_id: int, istek: DurumIstegi):
+    """
+    Olayı ileri bir duruma geçirir (yeni → goruldu → mudahale → cozuldu, adım atlanabilir).
+    404: olay yok · 409: geri/aynı duruma geçiş · 422: geçersiz gövde.
+    """
+    sonuc, veri = veritabani.olay_durum_guncelle(
+        olay_id, istek.durum, istek.onaylayan, istek.not_ or None)
+    if sonuc == "yok":
+        raise HTTPException(404, "Olay bulunamadı")
+    if sonuc == "geri":
+        return JSONResponse(status_code=409, content={
+            "detail": f"Geri veya aynı duruma geçilemez ({veri} → {istek.durum})",
+            "mevcut": veri,
+        })
+    await yonetici.yayinla({"tip": "olay_guncelleme", "veri": veri})
+    return veri
+
+
+@app.get("/api/istatistik/mudahale")
+def mudahale_istatistigi():
+    """acik_sayisi tüm zamanlar; ortalamalar ve cozulen_sayisi son 24 saat."""
+    return veritabani.mudahale_istatistigi()
 
 
 @app.get("/api/durum")

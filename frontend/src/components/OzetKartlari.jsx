@@ -1,6 +1,6 @@
 import { TEHDIT_PENCERE_SN } from "../sabitler";
 import {
-  seviyeAnahtari, bugunBaslangicSn, kovalaraBol, sparkNoktalari,
+  seviyeAnahtari, bugunBaslangicSn, kovalaraBol, sparkNoktalari, acikMi, sureBicim, tehditteMi,
 } from "../hesaplar";
 
 function Kart({ etiket, sayi, alt, trend, renk, noktalar, vurgulu, sayiRenkli }) {
@@ -23,7 +23,10 @@ function Kart({ etiket, sayi, alt, trend, renk, noktalar, vurgulu, sayiRenkli })
 }
 
 // olaylar: analitik listesi (yeni → eski); dugumOzet: { toplam, cevrimici, cevrimdisi[], veriYok[] }
-export default function OzetKartlari({ olaylar, simdi, esik, dugumOzet, cevrimiciGecmis }) {
+// acikAlarmlar: çözülmemiş olaylar (?durum=acik); istatistik: /api/istatistik/mudahale
+export default function OzetKartlari({
+  olaylar, simdi, esik, dugumOzet, cevrimiciGecmis, acikAlarmlar, istatistik,
+}) {
   const simdiSn = Math.floor(simdi.getTime() / 1000);
   const bugun = bugunBaslangicSn(simdi);
   const bugunku = olaylar.filter((o) => o.zaman >= bugun);
@@ -33,8 +36,9 @@ export default function OzetKartlari({ olaylar, simdi, esik, dugumOzet, cevrimic
     olaylar.filter((o) => simdiSn - o.zaman < 3600 && simdiSn - o.zaman >= 0 && filtre(o)).length;
   const hepsi = () => true;
 
+  // Çözülmüş kritik olay "AKTİF" sayılmaz (tehdit seviyesiyle aynı kural)
   const kritikAktif = olaylar.some(
-    (o) => seviyeli("kritik")(o) && simdiSn - o.zaman <= TEHDIT_PENCERE_SN
+    (o) => seviyeli("kritik")(o) && simdiSn - o.zaman <= TEHDIT_PENCERE_SN && tehditteMi(o)
   );
   const kritikBugun = bugunku.filter(seviyeli("kritik")).length;
 
@@ -81,6 +85,20 @@ export default function OzetKartlari({ olaylar, simdi, esik, dugumOzet, cevrimic
       trend: "LWT",
       renk: "#34d399",
       noktalar: sparkNoktalari(aktifSeri, { max: dugumOzet.toplam }),
+    },
+    {
+      // Sayı tüm zamanlar, ortalamalar son 24 saat (backend hesaplar)
+      etiket: "Açık alarm",
+      sayi: istatistik?.acik_sayisi ?? "—",
+      alt: istatistik
+        ? istatistik.ort_cozum_sn == null && istatistik.ort_gorulme_sn == null
+          ? "Son 24 sa çözülen alarm yok"
+          : `24 sa ort. · görülme ${sureBicim(istatistik.ort_gorulme_sn)} · çözüm ${sureBicim(istatistik.ort_cozum_sn)}`
+        : "İstatistik alınamadı",
+      trend: `${istatistik?.cozulen_sayisi ?? 0} çözüldü`,
+      renk: "#fbbf24",
+      noktalar: sparkNoktalari(kovalaraBol(acikAlarmlar, simdiSn, { filtre: acikMi })),
+      sayiRenkli: (istatistik?.acik_sayisi ?? 0) > 0,
     },
   ];
 

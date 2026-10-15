@@ -1,8 +1,10 @@
 # Test Sonuçları (Rapor Tablo 6)
 
 Test tarihi: 12 Ekim 2026, 15:39 (otomatik test scripti ile, T1-T8 tek çalıştırma)
+Son çalıştırma: 15 Ekim 2026, 12:51 (T1-T9 tek çalıştırma, hepsi başarılı; aynı
+backend açıkken tekrarında da T1-T9 başarılı)
 Yöntem: scripts/test_senaryolari.py — her senaryo broker'a kontrollü mesaj
-gönderir, backend API'sinden sonuç doğrulanır.
+gönderir, backend API'sinden (T9'da ayrıca PATCH ve WebSocket) sonuç doğrulanır.
 Ortam: Mosquitto broker + FastAPI backend + SQLite (sahte üreteç kapalı,
 e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfırlandı
 (yedek: backend/yedekler/kampus_20261012_1538.db); olay id'leri bu yüzden küçüktür.
@@ -18,6 +20,7 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
 | T6 | Bildirim (e-posta) | alev=1, hareket=1, duman=2500, alev 0→1 (iki kez) | kritik/yüksekte mail, orta/bilgide yok, bekleme süresinde tekrar yok | 8/8 kontrol geçti (SMTP taklit) | BAŞARILI |
 | T7 | LWT ile çevrimdışı ve geri gelme | online → socket kapatma (DISCONNECT yok) → yeniden bağlanma | /api/dugumler'de çevrimdışı, sonra çevrimiçi | LWT 0,1 sn'de yansıdı, geri bağlanınca anında çevrimiçi | BAŞARILI |
 | T8 | Histerezis (alarm fırtınası önleme) | duman 2100, 2500, 2900, 2300, 1900 → 1700 → 1500; alev 1, 1 → 0 | tek yüksek olay, ölü bantta olay yok, 1600 altında tek bilgi; alev sürerken olay yok, sönünce tek bilgi | 5/5 adım beklenen olay sayısıyla | BAŞARILI |
+| T9 | Olay yaşam döngüsü (alarm onaylama) — 15 Ekim 2026 | hareket=1 → PATCH goruldu → PATCH cozuldu → geri/aynı geçiş, hatalı gövdeler | durum=yeni; ileri geçişler 200; atlanan adım zamanı dolu; geri 409; olmayan id 404; geçersiz gövde 422; WS olay_guncelleme; istatistik değer döner | 12/12 kontrol geçti | BAŞARILI |
 
 ## Notlar
 - Testler test_dugum düğümü ile yapıldı; çalışma sonunda bu düğümün kayıtları
@@ -53,3 +56,20 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
   24 yüksek olay üretiyordu. Ölçümlerin hepsi sensor_gecmis'e yazıldı.
 - Gerçek SMTP gönderimi scripts/eposta_test.py ile ayrıca doğrulandı (12 Ekim 2026,
   Gmail SMTP SSL 465).
+- T9 (15 Ekim 2026, 12:51): test_dugum'a hareket=1 gönderildi, #394 orta olay
+  `durum=yeni`, `onaylayan=null` geldi. Doğrulananlar:
+  - PATCH goruldu (operatör + not) → 200, `goruldu_zaman` dolu, `mudahale_zaman` boş
+  - açık bir WebSocket istemcisine `{"tip": "olay_guncelleme"}` mesajı geldi (durum=goruldu)
+  - PATCH cozuldu → 200; atlanan `mudahale_zaman` = `cozuldu_zaman`
+  - olay_adimlari: [goruldu (T9 Operatör, "Kamera kontrol ediliyor"), cozuldu (T9 Operatör)]
+  - cozuldu → goruldu: 409 (`mevcut=cozuldu`); cozuldu → cozuldu: 409
+  - olmayan id: 404; durum=xyz, durum=yeni, boş onaylayan, 41 karakter onaylayan,
+    301 karakter not: hepsi 422
+  - `?durum=acik` listesinde çözülen olay ve çözülmüş kayıt yok
+  - T8'in ürettiği 3 bilgi olayı oluşurken `cozuldu` / `onaylayan=sistem`
+  - /api/istatistik/mudahale → `{acik_sayisi: 4, ort_gorulme_sn: 2.1, ort_cozum_sn: 2.1,
+    cozulen_sayisi: 1}` (açık 4: T1, T2, T3 ve T8'in çözülmemiş alarmları)
+  - Temizlik: olaylar 9, olay_adimlari 2, sensor_gecmis 21 kayıt silindi.
+- Göç (15 Ekim 2026, 12:50): ilk açılışta olaylar tablosuna 6 kolon eklendi; mevcut
+  4 orta (hareket) kayıt `cozuldu` / `sistem (göç)`, 3 uyari kayıt `cozuldu` /
+  `sistem` oldu. Göç öncesi yedek: backend/yedekler/kampus_20261015_1238_goconcesi.db.

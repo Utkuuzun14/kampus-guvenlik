@@ -1,5 +1,7 @@
 import { SEVIYE_AD, SENSOR_KISA } from "../sabitler";
-import { seviyeAnahtari, saatBicim, bugunBaslangicSn } from "../hesaplar";
+import { seviyeAnahtari, tarihSaatBicim, akistaMi } from "../hesaplar";
+import DurumRozeti from "./DurumRozeti";
+import DurumIlerlet from "./DurumIlerlet";
 
 const FILTRELER = [
   ["hepsi", "Tümü"],
@@ -10,16 +12,9 @@ const FILTRELER = [
   ["bilgi", "Bilgi"],
 ];
 
-// Bugünkü olaylar yalnızca saatle, eskiler gün.ay ile gösterilir
-const zamanBicim = (unix, bugun) => {
-  if (!unix) return "-";
-  if (unix >= bugun) return saatBicim(unix);
-  const t = new Date(unix * 1000);
-  return `${t.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" })} ${saatBicim(unix)}`;
-};
-
-export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi }) {
-  const bugun = bugunBaslangicSn(simdi);
+// Bugünkü olaylar yalnızca saatle, eskiler gün.ay ile gösterilir (tarihSaatBicim).
+// Orta+ olaylarda Durum kolonunda rozet ve sıradaki adımın butonu; açıklama detayı açar.
+export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi, onGuncellendi, onDetay }) {
   // Filtre mantığı öncekiyle aynı: seviye birebir eşleşmeli
   const satirlar = olaylar.filter((o) => filtre === "hepsi" || o.seviye === filtre);
 
@@ -54,13 +49,14 @@ export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi }) {
               <th>Sensör</th>
               <th>Değer</th>
               <th>Seviye</th>
+              <th>Durum</th>
               <th>Açıklama</th>
             </tr>
           </thead>
           <tbody>
             {satirlar.length === 0 && (
               <tr>
-                <td colSpan="6" className="bos">
+                <td colSpan="7" className="bos">
                   {olaylar.length === 0 ? "Henüz olay yok." : "Bu seviyede olay yok."}
                 </td>
               </tr>
@@ -70,7 +66,7 @@ export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi }) {
               return (
                 <tr key={o.id ?? i}>
                   <td className="mono soluk" title={new Date(o.zaman * 1000).toLocaleString("tr-TR")}>
-                    {zamanBicim(o.zaman, bugun)}
+                    {tarihSaatBicim(o.zaman, simdi)}
                   </td>
                   <td className="mono">{o.dugum}</td>
                   <td>{SENSOR_KISA[o.sensor] ?? o.sensor}</td>
@@ -80,7 +76,21 @@ export default function OlayTablosu({ olaylar, filtre, onFiltre, simdi }) {
                       {s ? SEVIYE_AD[s] : o.seviye}
                     </span>
                   </td>
-                  <td className="aciklama">{o.mesaj}</td>
+                  <td>
+                    {akistaMi(o) ? (
+                      <div className="tablo-durum">
+                        <DurumRozeti olay={o} />
+                        <DurumIlerlet olay={o} onGuncellendi={onGuncellendi} />
+                      </div>
+                    ) : (
+                      <span className="kucuk-mono" title="Bu seviye operatör akışına girmez">otomatik</span>
+                    )}
+                  </td>
+                  <td className="aciklama">
+                    <button type="button" className="metin-btn" onClick={() => onDetay(o)}>
+                      {o.mesaj}
+                    </button>
+                  </td>
                 </tr>
               );
             })}

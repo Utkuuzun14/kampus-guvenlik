@@ -1,6 +1,8 @@
 // Olay verisinden panel göstergelerini hesaplayan saf fonksiyonlar.
 // Olay listeleri yeni → eski sıralıdır (REST ve WebSocket bu sırayı korur).
-import { SEVIYELER, SEVIYE_AD, TEHDIT_PENCERE_SN } from "./sabitler";
+import {
+  SEVIYELER, SEVIYE_AD, TEHDIT_PENCERE_SN, DURUMLAR, AKIS_SEVIYELERI,
+} from "./sabitler";
 
 // Türkçe karakterleri ASCII'ye çevirir ("yüksek" → "yuksek")
 export const asciiye = (metin) =>
@@ -19,8 +21,6 @@ export const seviyeAnahtari = (seviye) => {
   return SEVIYELER.includes(anahtar) ? anahtar : null;
 };
 
-export const olayKimligi = (o) => o.id ?? `${o.zaman}-${o.dugum}-${o.sensor}`;
-
 // "ALEV ALGILANDI" → "Alev algılandı"
 export const cumleDuzeni = (metin) => {
   const kucuk = String(metin ?? "").toLocaleLowerCase("tr-TR");
@@ -34,6 +34,14 @@ export const saatBicim = (unix) =>
       })
     : "-";
 
+// Bugünse yalnızca saat, değilse "gün.ay saat"
+export const tarihSaatBicim = (unix, simdi = new Date()) => {
+  if (!unix) return "-";
+  if (unix >= bugunBaslangicSn(simdi)) return saatBicim(unix);
+  const t = new Date(unix * 1000);
+  return `${t.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" })} ${saatBicim(unix)}`;
+};
+
 export const bugunBaslangicSn = (simdi) => {
   const g = new Date(simdi);
   g.setHours(0, 0, 0, 0);
@@ -43,20 +51,63 @@ export const bugunBaslangicSn = (simdi) => {
 export const pencereIcinde = (olaylar, simdiSn, pencereSn) =>
   olaylar.filter((o) => o.zaman && simdiSn - o.zaman <= pencereSn);
 
-// Son 5 dakikadaki en yeni kritik olay (alarm bandı için)
-export const sonKritikOlay = (olaylar, simdiSn) =>
-  pencereIcinde(olaylar, simdiSn, TEHDIT_PENCERE_SN).find(
-    (o) => seviyeAnahtari(o.seviye) === "kritik"
-  ) ?? null;
+// ---- Olay yaşam döngüsü ----
 
-// Son 5 dakikadaki en yüksek seviyeden tehdit durumu
-export function tehditHesapla(olaylar, simdiSn, onaylananKimlik) {
-  const son = pencereIcinde(olaylar, simdiSn, TEHDIT_PENCERE_SN);
-  const kritik = son.find((o) => seviyeAnahtari(o.seviye) === "kritik");
-  if (kritik) {
-    return olayKimligi(kritik) === onaylananKimlik
-      ? { tip: "izleniyor", metin: "İZLENİYOR" }
-      : { tip: "kritik", metin: "KRİTİK" };
+// Seviyesi operatör akışına giren (orta, yüksek, kritik) olay mı
+export const akistaMi = (o) => AKIS_SEVIYELERI.includes(seviyeAnahtari(o.seviye));
+
+// Olayın durumu; alanı olmayan (eski) kayıtlar seviyesine göre varsayılır
+export const durumu = (o) =>
+  DURUMLAR.includes(o.durum) ? o.durum : akistaMi(o) ? "yeni" : "cozuldu";
+
+export const acikMi = (o) => akistaMi(o) && durumu(o) !== "cozuldu";
+
+// Sıradaki durum (çözülmüş veya akış dışı olayda null)
+export const siradakiDurum = (o) =>
+  acikMi(o) ? DURUMLAR[DURUMLAR.indexOf(durumu(o)) + 1] : null;
+
+// Olay listesinde id'si eşleşen kaydı yerinde günceller
+export const olayGuncelle = (liste, yeni) =>
+  liste.some((o) => o.id === yeni.id)
+    ? liste.map((o) => (o.id === yeni.id ? { ...o, ...yeni } : o))
+    : liste;
+
+// 42 → "42 sn", 134 → "2 dk 14 sn", 7260 → "2 sa 1 dk"
+export function sureBicim(sn) {
+  if (sn == null || !Number.isFinite(sn) || sn < 0) return "—";
+  const t = Math.round(sn);
+  if (t < 60) return `${t} sn`;
+  if (t < 3600) return `${Math.floor(t / 60)} dk${t % 60 ? ` ${t % 60} sn` : ""}`;
+  const dk = Math.floor((t % 3600) / 60);
+  return `${Math.floor(t / 3600)} sa${dk ? ` ${dk} dk` : ""}`;
+}
+
+// Alarm bandındaki olay: çözülmemiş kritik/yüksek olaylardan en ağırı, eşitse en yenisi.
+// Zaman penceresi yok; olay çözülünce bant kaybolur.
+export function bantOlayi(acikAlarmlar) {
+  const bant = acikAlarmlar.filter(
+    (o) => acikMi(o) && ["kritik", "yuksek"].includes(seviyeAnahtari(o.seviye))
+  );
+  if (bant.length === 0) return { olay: null, adet: 0 };
+  const agirlik = (o) => SEVIYELER.indexOf(seviyeAnahtari(o.seviye));
+  const olay = bant.reduce((en, o) =>
+    agirlik(o) > agirlik(en) || (agirlik(o) === agirlik(en) && o.id > en.id) ? o : en
+  );
+  return { olay, adet: bant.length };
+}
+
+// Çözülmüş akış olayları tehdit seviyesine ve harita alarmına girmez
+export const tehditteMi = (o) => !(akistaMi(o) && durumu(o) === "cozuldu");
+
+// Son 5 dakikadaki en yüksek seviyeden tehdit durumu. Kritik olay operatörce
+// görüldü/müdahaledeyse İZLENİYOR, çözüldüyse hesaba girmez.
+export function tehditHesapla(olaylar, simdiSn) {
+  const son = pencereIcinde(olaylar, simdiSn, TEHDIT_PENCERE_SN).filter(tehditteMi);
+  const kritikler = son.filter((o) => seviyeAnahtari(o.seviye) === "kritik");
+  if (kritikler.length) {
+    return kritikler.some((o) => durumu(o) === "yeni")
+      ? { tip: "kritik", metin: "KRİTİK" }
+      : { tip: "izleniyor", metin: "İZLENİYOR" };
   }
   let enYuksek = -1;
   for (const o of son) {

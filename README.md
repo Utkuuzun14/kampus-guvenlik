@@ -43,8 +43,8 @@ Komutlar proje kökünden, backend venv aktifken çalıştırılır.
 
 0. **Veritabanını sıfırla:** `python scripts/db_sifirla.py`
    → önce `backend/yedekler/kampus_YYYYMMDD_HHMM.db` yedeği alınır, kayıt sayıları
-   gösterilir ve "EVET" onayı istenir (sorusuz: `--evet`). olaylar ve sensor_gecmis
-   boşaltılır, tablo yapısı korunur. Backend açıkken de çalışır; ardından backend'i
+   gösterilir ve "EVET" onayı istenir (sorusuz: `--evet`). olaylar, olay_adimlari ve
+   sensor_gecmis boşaltılır, tablo yapısı korunur. Backend açıkken de çalışır; ardından backend'i
    yeniden başlatmak bellekteki alarm durumunu da sıfırlar.
 1. **Sistemi başlat:** `scripts\baslat.bat` → Broker, Backend, Sahte Veri (üç düğüm)
    ve React paneli ayrı pencerelerde açılır. Panel: http://localhost:5173
@@ -53,19 +53,28 @@ Komutlar proje kökünden, backend venv aktifken çalıştırılır.
    düğüm başına ~10-15 dk'da bir kısa süre aşılır.
 3. **İzinsiz giriş:** `python scripts/senaryo.py hareket dugum2`
    → Spor Kompleksi'nde ~25 sn art arda hareket (orta seviye olaylar, olay akışında görünür).
+   Her hareket olayı "Yeni" durumunda açılır ve "Açık alarm" kartına eklenir; bant
+   yalnızca kritik/yüksek alarmları gösterir.
 4. **Yangın:** haritada dugum1'e tıkla (gösterge "MQ-2 · dugum1"), sonra
    `python scripts/senaryo.py yangin dugum1`
    → duman 30 sn'de kademeli yükselip eşiği (1800) aşar, ardından alev = kritik:
    alarm bandı, tehdit seviyesi KRİTİK, kırmızı harita halesi ve e-posta.
    Histerezis sayesinde olay akışında yalnızca 4 olay görünür: duman eşiği aşıldı
    (yüksek), alev (kritik), duman normale döndü ve alev söndü (bilgi).
-   60 sn sonra duman düşer, alev "Yok" olur. Alarm bandındaki "Onayla" ile alarm
-   onaylanır.
+   60 sn sonra duman düşer, alev "Yok" olur.
+   **Alarmı panelden çözme:** paneli ikinci bir sekmede de aç. Alarm bandında
+   "Görüldü"ye bas, operatör adını (tarayıcı hatırlar) ve isteğe bağlı notu yazıp
+   onayla: rozet "Görüldü" olur, tehdit seviyesi İZLENİYOR'a döner. Ardından
+   "Müdahale" ve "Çöz" (ya da doğrudan "Çöz"): kritik bant kaybolur, sıradaki açık
+   yüksek alarm (duman) banda gelir; onu da çöz. "Açık alarm" kartı ve ortalama
+   görülme/çözüm süresi güncellenir, ikinci sekme de sayfa yenilemeden aynı anda
+   değişir. Olay başlığına tıklayınca zaman çizelgesi (oluştu → görüldü → müdahale
+   → çözüldü, her adımda saat + operatör + not) açılır.
 5. **Bağlantı kopması (LWT):** `python scripts/senaryo.py kopma dugum3`
    → Yurt Binası düğümü DISCONNECT göndermeden düşer, broker LWT yayınlar: "Aktif düğüm
    2/3", dugum3 çizgisi sönük gri. 30 sn sonra geri gelir ve 3/3 olur.
 6. **Testler (isteğe bağlı):** üreteci kapatıp `python scripts/test_senaryolari.py`
-   (T1-T7, sonuçlar `docs/TEST_SONUCLARI.md`).
+   (T1-T9, sonuçlar `docs/TEST_SONUCLARI.md`).
 
 Notlar:
 - Senaryo süresince üreteç ilgili düğümün ölçümlerini duraklatır, değerler karışmaz.

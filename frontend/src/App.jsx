@@ -11,15 +11,18 @@ import OlayAkisi from "./components/OlayAkisi";
 import IsiHaritasi from "./components/IsiHaritasi";
 import SeviyeDagilimi from "./components/SeviyeDagilimi";
 import OlayTablosu from "./components/OlayTablosu";
+import OlayDetay from "./components/OlayDetay";
 import useDugumler, { useDumanSerisi } from "./hooks/useDugumler";
+import { useMudahaleIstatistigi } from "./hooks/useOlayDurumu";
 import {
   API, WS_URL, ESIK_DUMAN_VARSAYILAN, TEHDIT_PENCERE_SN, haritadaMi,
 } from "./sabitler";
 import {
-  seviyeAnahtari, olayKimligi, sonKritikOlay, tehditHesapla, pencereIcinde,
+  seviyeAnahtari, tehditHesapla, pencereIcinde, acikMi, bantOlayi, olayGuncelle, tehditteMi,
 } from "./hesaplar";
 
 const ANALITIK_LIMIT = 1000;
+const ACIK_LIMIT = 200;
 
 function App() {
   const [olaylar, setOlaylar] = useState([]);
@@ -31,11 +34,25 @@ function App() {
   const [mqttDurum, setMqttDurum] = useState("bekliyor"); // backend ↔ broker: ok | hata | bekliyor
   const [dbDurum, setDbDurum] = useState("bekliyor"); // ok | hata | bekliyor
   const [filtre, setFiltre] = useState("hepsi");
-  const [onaylananKimlik, setOnaylananKimlik] = useState(null);
+  const [acikAlarmlar, setAcikAlarmlar] = useState([]); // çözülmemiş olaylar, zaman penceresiz
+  const [seciliOlay, setSeciliOlay] = useState(null); // detay penceresindeki olay
   const [seciliDugum, setSeciliDugum] = useState(null);
   const [simdi, setSimdi] = useState(() => new Date());
   const wsRef = useRef(null);
   const yenidenBaglanRef = useRef(null);
+  const [istatistik, istatistikYenile] = useMudahaleIstatistigi();
+
+  // Durum güncellemesi (PATCH yanıtı veya WS "olay_guncelleme"): tüm listelerde yerinde
+  const guncellemeUygula = (yeni) => {
+    setOlaylar((l) => olayGuncelle(l, yeni));
+    setAnalitik((l) => olayGuncelle(l, yeni));
+    setAcikAlarmlar((l) => {
+      if (!acikMi(yeni)) return l.filter((o) => o.id !== yeni.id);
+      return l.some((o) => o.id === yeni.id) ? olayGuncelle(l, yeni) : [yeni, ...l];
+    });
+    setSeciliOlay((s) => (s && s.id === yeni.id ? { ...s, ...yeni } : s));
+    istatistikYenile();
+  };
 
   // Başlangıçta geçmiş olayları REST ile çek
   const olaylariGetir = async () => {
@@ -61,6 +78,16 @@ function App() {
       setDbDurum("ok");
     } catch {
       setDbDurum("hata");
+    }
+  };
+
+  // Açık alarmlar: alarm bandı ve "Açık alarm" kartı (eski açık alarmlar da dahil)
+  const acikGetir = async () => {
+    try {
+      const cevap = await fetch(`${API}/api/olaylar?durum=acik&limit=${ACIK_LIMIT}`);
+      if (cevap.ok) setAcikAlarmlar(await cevap.json());
+    } catch {
+      // sessiz geç
     }
   };
 
@@ -99,6 +126,12 @@ function App() {
           if (mesaj.tip === "olay" && mesaj.veri) {
             setOlaylar((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, 50));
             setAnalitik((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, ANALITIK_LIMIT));
+            if (acikMi(mesaj.veri)) {
+              setAcikAlarmlar((oncekiler) => [mesaj.veri, ...oncekiler].slice(0, ACIK_LIMIT));
+              istatistikYenile();
+            }
+          } else if (mesaj.tip === "olay_guncelleme" && mesaj.veri) {
+            guncellemeUygula(mesaj.veri);
           }
         } catch (e) {
           console.error("WS mesaj çözme hatası:", e);
@@ -127,13 +160,17 @@ function App() {
   useEffect(() => {
     olaylariGetir();
     analitikGetir();
+    acikGetir();
     durumGetir();
     saglikGetir();
     const durumZaman = setInterval(() => {
       durumGetir();
       saglikGetir();
     }, 5000);
-    const analitikZaman = setInterval(analitikGetir, 60000);
+    const analitikZaman = setInterval(() => {
+      analitikGetir();
+      acikGetir();
+    }, 60000);
     const kapatildiRef = { value: false };
     wsBaglan(kapatildiRef);
     return () => {
@@ -166,10 +203,10 @@ function App() {
   };
   const konumlar = Object.fromEntries(dugumListesi.map((d) => [d.id, d.konum]));
 
-  // Son 5 dk'da kritik olayı olan düğümler haritada alarm gösterir
+  // Son 5 dk'da çözülmemiş kritik olayı olan düğümler haritada alarm gösterir
   const alarmdakiler = new Set(
     pencereIcinde(kaynak, simdiSn, TEHDIT_PENCERE_SN)
-      .filter((o) => seviyeAnahtari(o.seviye) === "kritik")
+      .filter((o) => seviyeAnahtari(o.seviye) === "kritik" && tehditteMi(o))
       .map((o) => o.dugum)
   );
   // Gösterge ve harita detayı yalnızca haritadaki (konumu tanımlı) düğümler için.
@@ -186,9 +223,8 @@ function App() {
   const dumanSeri = useDumanSerisi(gosterilenDugum, sonDuman);
   const dumanSon60 = dumanSeri.filter((o) => simdiSn - o.zaman <= 60);
 
-  const tehdit = tehditHesapla(kaynak, simdiSn, onaylananKimlik);
-  const kritikOlay = sonKritikOlay(kaynak, simdiSn);
-  const alarmGoster = kritikOlay && olayKimligi(kritikOlay) !== onaylananKimlik;
+  const tehdit = tehditHesapla(kaynak, simdiSn);
+  const bant = bantOlayi(acikAlarmlar);
 
   // Broker ışığı: backend'in MQTT bağlantısı (/api/saglik); tek düğümün kopması etkilemez
   const brokerDurum = mqttDurum;
@@ -218,11 +254,13 @@ function App() {
       <div className="icerik">
         <UstBar simdi={simdi} tehdit={tehdit} isiklar={isiklar} baglanti={baglanti} />
 
-        {alarmGoster && (
+        {bant.olay && (
           <AlarmBandi
-            olay={kritikOlay}
+            olay={bant.olay}
+            adet={bant.adet}
             konumlar={konumlar}
-            onOnayla={() => setOnaylananKimlik(olayKimligi(kritikOlay))}
+            onGuncellendi={guncellemeUygula}
+            onDetay={setSeciliOlay}
           />
         )}
 
@@ -238,6 +276,8 @@ function App() {
           esik={esik}
           dugumOzet={dugumOzet}
           cevrimiciGecmis={cevrimiciGecmis}
+          acikAlarmlar={acikAlarmlar}
+          istatistik={istatistik}
         />
 
         <VeriHatti durumlar={hatDurumlari} />
@@ -252,7 +292,8 @@ function App() {
           />
           <div className="sag-sutun">
             <DumanGostergesi son={sonDuman?.deger ?? null} veri={dumanSon60} esik={esik} dugum={gosterilenDugum} />
-            <OlayAkisi olaylar={olaylar} konumlar={konumlar} />
+            <OlayAkisi olaylar={olaylar} konumlar={konumlar}
+              onGuncellendi={guncellemeUygula} onDetay={setSeciliOlay} />
           </div>
         </section>
 
@@ -261,7 +302,18 @@ function App() {
           <SeviyeDagilimi olaylar={analitik} simdiSn={simdiSn} />
         </section>
 
-        <OlayTablosu olaylar={olaylar} filtre={filtre} onFiltre={setFiltre} simdi={simdi} />
+        <OlayTablosu olaylar={olaylar} filtre={filtre} onFiltre={setFiltre} simdi={simdi}
+          onGuncellendi={guncellemeUygula} onDetay={setSeciliOlay} />
+
+        {seciliOlay && (
+          <OlayDetay
+            key={seciliOlay.id}
+            olay={seciliOlay}
+            konumlar={konumlar}
+            onKapat={() => setSeciliOlay(null)}
+            onGuncellendi={guncellemeUygula}
+          />
+        )}
 
         <footer className="altbilgi">
           <span>ESP32-S2 → MQTT (QoS 1, LWT) → Mosquitto → FastAPI → SQLite → React</span>

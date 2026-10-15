@@ -67,3 +67,26 @@ export const DUGUM_KONUMLARI = {
 export const haritadaMi = (id) =>
   Boolean(DUGUM_KONUMLARI.kusbakisi[id] && DUGUM_KONUMLARI.perspektif[id]);
 
+
+// Olay yaşam döngüsü (docs/SOZLESMELER.md §6): yalnızca ileri gidilir
+export const DURUMLAR = ["yeni", "goruldu", "mudahale", "cozuldu"];
+
+// Yalnızca bu seviyeler operatör akışına girer; bilgi/uyari oluşurken çözülür
+export const AKIS_SEVIYELERI = ["orta", "yuksek", "kritik"];
+
+export const DURUM_AD = {
+  yeni: "Yeni",
+  goruldu: "Görüldü",
+  mudahale: "Müdahalede",
+  cozuldu: "Çözüldü",
+};
+
+// Durum butonlarının etiketi (hedef duruma göre)
+export const DURUM_EYLEM = {
+  goruldu: "Görüldü",
+  mudahale: "Müdahale",
+  cozuldu: "Çöz",
+};
+
+// Operatör adı bu tarayıcıda hatırlanır
+export const OPERATOR_ANAHTAR = "kg_operator";
