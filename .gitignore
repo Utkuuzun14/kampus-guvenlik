@@ -9,3 +9,7 @@ node_modules/
 
 # Claude Code yerel ayarları
 .claude/
+
+# Firmware (PlatformIO)
+.pio/
+firmware/include/gizli.h

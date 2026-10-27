@@ -4,6 +4,9 @@ Bu doküman, sistemin tüm parçalarının (ESP32-S2 firmware, FastAPI backend,
 React arayüz) uyacağı ortak kuralları tanımlar. Herhangi bir parçayı yazmadan
 önce buraya bakılır. Buradaki bir şey değişirse, tüm parçalar birlikte güncellenir.
 
+> **Firmware:** `firmware/` (ESP32-S2, PlatformIO) bu sözleşmeyi uygular; MQTT davranışı
+> `scripts/sahte_veri.py` ile aynıdır. Pinler ve bağlantı şeması `firmware/README.md`'de.
+
 ---
 
 ## 1. Mimari zinciri

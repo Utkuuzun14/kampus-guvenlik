@@ -690,3 +690,36 @@ MQTT sözleşmesi, kural motoru ve e-posta bildirimi değişmedi.
 | T12 Kimlik doğrulama | 18/18 kontrol: token'sız 401, başka anahtarla imzalı token 401, yanlış parola ve olmayan kullanıcı aynı 401 mesajı, 6. hatalı deneme 429, pasif kullanıcı 401, operatör mod 403 / admin 200 (`degistiren` dolu), operatör kullanıcı listesi 403, admin kendini pasif yapamaz 409, kısa parola 422, son admin kuralı, operatörün çözdüğü alarmda `kim` = operatörün adı, canlı backend'e süresi dolmuş token 401, WS token'sız / bozuk 4401, `/api/saglik` token'sız 200, 87 yanıtın hiçbirinde parola özeti/tuz yok |
 | T9 uyarlaması | onaylayan token'dan; gövdedeki sahte `onaylayan` yok sayıldı; geçersiz durum ve 301 karakter not yine 422 |
 | T1–T11 regresyon | Hepsi başarılı (istekler geçici admin token'ıyla) |
+
+---
+
+## 10. Donanım ve firmware (27 Ekim 2026 eki)
+
+Sahte üretecin yerini alan gerçek sensör düğümü. Ayrıntı ve kurulum: `firmware/README.md`.
+Kod: `firmware/src/main.cpp`, pin/ayar: `firmware/include/pinler.h`.
+
+| Bileşen | Seçim |
+|---|---|
+| Mikrodenetleyici | Wemos LOLIN S2 Mini (ESP32-S2, 240 MHz, 4 MB flash, 2 MB PSRAM, yerel USB CDC) |
+| Hareket | HC-SR501 PIR, OUT → GPIO 7 (aktif HIGH, iç pull-down), besleme VBUS 5 V |
+| Duman/gaz | MQ-2, AO → GPIO 3 (ADC1, 12 bit 0–4095, 11 dB, 10 örnek ortalaması), besleme 3V3 |
+| Alev | KY-026, DO → GPIO 5 (alev görünce LOW), besleme 3V3 |
+| Durum göstergesi | dahili LED GPIO 15: bağlanırken 1 Hz, bağlıyken sabit, olayda hızlı yanıp söner |
+| Geliştirme | PlatformIO Core 6.2.0, `espressif32@6.9.0` (Arduino-ESP32 2.0.17) |
+| Kütüphaneler | `256dpi/MQTT@2.5.2` (QoS 1 yayın + LWT; PubSubClient QoS 1 yayınlayamaz), `bblanchon/ArduinoJson@7.2.1` |
+| Derleme boyutu | RAM 51 984 / 327 680 bayt (%15,9), Flash 722 462 / 1 310 720 bayt (%55,1) |
+
+Sözleşme uyumu (`scripts/sahte_veri.py` ile birebir): konular `kampus/guvenlik/<dugum>/{duman,hareket,alev,durum}`,
+JSON alanları `dugum, sensor, deger, zaman`, QoS 1, retain yok, keepalive 60 sn, LWT `.../durum` ←
+`{"durum":"offline","zaman":0}`, her bağlanışta `online`, 3 sn'lik turda duman → hareket → alev.
+`zaman` NTP'den (Europe/Istanbul; `tr.pool.ntp.org`, `pool.ntp.org`); saat gelmeden 0 gönderilir
+ve backend kendi saatini yazar. Backend ve panelde değişiklik gerekmedi.
+
+Dayanıklılık: Wi-Fi koparsa 2 → 60 sn artan beklemeyle, MQTT koparsa 2 → 30 sn artan beklemeyle
+yeniden bağlanır; döngü `millis()` tabanlı ve bloklamasızdır. PIR ve MQ-2 ilk 60 sn (ısınma)
+yayınlanmaz. Hareket/alev 3 sn'lik tur içinde kilitlenir, kısa darbe kaçmaz.
+
+Durum (27.10.2026): PIR açık; MQ-2 ve alev besleme sorunu çözülene kadar derleme ayarıyla kapalı
+(`MQ2_AKTIF 0`, `ALEV_AKTIF 0` → hiç okunmaz, hiç yayınlanmaz). Gerçek kart `dugum1` iken sahte
+üreteç `--dugumler dugum2,dugum3` ile çalışır. Kablolama sorunları için `TESHIS_MODU` (ağsız,
+GPIO 1–14 dijital + GPIO 1–10 analog, 500 ms).
