@@ -1,5 +1,5 @@
 """
-Test senaryoları scripti (rapor Tablo 6, T1-T12).
+Test senaryoları scripti (rapor Tablo 6, T1-T12, T17-T18; T13-T16 elle donanım testi).
 Her senaryo için broker'a kontrollü mesaj gönderir, backend'in olayı doğru
 işleyip işlemediğini API üzerinden doğrular. T6 (e-posta) gerçek mail
 göndermez: SMTP taklit edilir, MQTT işleyicisi süreç içinde çağrılır.
@@ -12,6 +12,12 @@ T10, yangın teyidini (duman + alev korelasyonu) canlı ve kural fonksiyonu
 üzerinden doğrular. T11, güvenlik modunu (PUT/GET /api/ayarlar/mod, WS "mod")
 ve moda/saate bağlı hareket kuralını doğrular. T12, kimlik doğrulama ve rol
 tabanlı yetkilendirmeyi (401/403/409/429, WS 4401, token'dan gelen onaylayan) doğrular.
+T17, hareket olayının yalnızca 0 → 1 geçişinde ve düğüm başına HAREKET_BEKLEME_SN
+beklemeyle üretildiğini; T18, LWT sonrası CEVRIMDISI_TOLERANS_SN içinde geri
+bağlanan düğüm için çevrimdışı olayı üretilmediğini doğrular.
+Hareket bekleme süresi canlı backend'de geçerli olduğundan hareket gönderen
+testler (hareket_tetikle) önce 0 gönderir, gerekirse bekleme süresini bekler;
+script bu yüzden ~1-2 dk daha uzun sürer.
 API korumalı olduğundan script başta veritabani modülüyle rastgele adlı ve
 parolalı geçici bir admin ve operatör oluşturup giriş yapar; istekler varsayılan
 olarak admin token'ıyla, T9/T12'deki durum geçişleri operatör token'ıyla yapılır.
@@ -177,6 +183,26 @@ def gecici_kullanicilar(*roller):
               f"({sum(k for k, _ in silinen)} kullanıcı, {sum(g for _, g in silinen)} giriş kaydı)")
 
 
+# Canlı backend'de test_dugum için son hareket olayının gönderildiği an (monotonic)
+SON_HAREKET = [None]
+
+
+def hareket_tetikle(client):
+    """
+    Yeni bir hareket olayı için 0 → 1 gönderir. Backend aynı düğümde son hareket
+    olayından HAREKET_BEKLEME_SN geçmeden olay üretmediği için gerekirse önce bekler.
+    (Script 30 sn içinde yeniden çalıştırılırsa ilk hareket bastırılabilir.)
+    """
+    if SON_HAREKET[0] is not None:
+        kalan = config.HAREKET_BEKLEME_SN + 0.5 - (time.monotonic() - SON_HAREKET[0])
+        if kalan > 0:
+            print(f"    (hareket bekleme süresi: {kalan:.0f} sn bekleniyor)")
+            time.sleep(kalan)
+    yayinla(client, "hareket", 0)
+    yayinla(client, "hareket", 1)
+    SON_HAREKET[0] = time.monotonic()
+
+
 def son_olay():
     """Backend API'den en son olayı çeker."""
     veri = api_istek("/api/olaylar?limit=1")[1]
@@ -194,7 +220,10 @@ def test_calistir(client, no, ad, sensor, deger, beklenen_seviye):
     print(f"\n[{no}] {ad}")
     onceki_id = son_olay_id()
     print(f"    Gönderiliyor: {sensor} = {deger}")
-    yayinla(client, sensor, deger)
+    if sensor == "hareket" and deger == 1:
+        hareket_tetikle(client)
+    else:
+        yayinla(client, sensor, deger)
     time.sleep(1.5)  # backend işlesin
     # Son olaya değil bu sensörün yeni olayına bakılır: aynı mesaj bileşik bir
     # olay da üretebilir (ör. T2'den hemen sonra T3 → yangin_teyit)
@@ -335,6 +364,7 @@ def test_bildirim():
             mock.patch.dict(bildirim._bekleme, clear=True), \
             mock.patch.dict(kurallar._alarm, clear=True), \
             mock.patch.dict(kurallar._korelasyon, clear=True), \
+            mock.patch.dict(kurallar._hareket, clear=True), \
             mock.patch.object(config, "KORELASYON_PENCERE_SN", -1), \
             mock.patch.object(kurallar, "mod_getir", lambda: "mesai_disi"), \
             mock.patch.object(config, "BILDIRIM_AKTIF", True), \
@@ -432,6 +462,133 @@ def test_lwt():
     print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
     return basarili
 
+def test_hareket_kenar(client):
+    """
+    T17: Hareket olayı yalnızca 0 → 1 geçişinde; aynı düğümde son hareket
+    olayından HAREKET_BEKLEME_SN geçmeden yeni olay yok. Canlı + saf fonksiyon.
+    """
+    bekleme = config.HAREKET_BEKLEME_SN
+    print(f"\n[T17] Hareket: 0 → 1 geçişinde olay, düğüm başına {bekleme:g} sn bekleme")
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(bool(kosul))
+
+    def hareketler(onceki_id):
+        return [o for o in yeni_olaylar(onceki_id) if o["sensor"] == "hareket"]
+
+    try:
+        onceki_id = son_olay_id()
+        hareket_tetikle(client)
+        time.sleep(1.5)
+        h = hareketler(onceki_id)
+        kontrol(f"0 → 1: tek hareket olayı ({h[0]['seviye'] if h else '-'}; mod mesai_disi → orta)",
+                len(h) == 1 and h[0]["seviye"] == "orta")
+
+        onceki_id = son_olay_id()
+        for _ in range(5):            # PIR'in her 3 sn'lik turda 1 yayınlaması
+            yayinla(client, "hareket", 1)
+        time.sleep(1.5)
+        kontrol("hareket sürerken (5 kez 1 → 1) yeni olay yok", not hareketler(onceki_id))
+
+        yayinla(client, "hareket", 0)
+        yayinla(client, "hareket", 1)
+        time.sleep(1.5)
+        gecen = time.monotonic() - SON_HAREKET[0]
+        kontrol(f"bekleme süresinde 0 → 1 ({gecen:.0f} sn < {bekleme:g} sn): olay yok",
+                not hareketler(onceki_id))
+
+        hareket_tetikle(client)       # bekleme dolana kadar bekler
+        time.sleep(1.5)
+        h = hareketler(onceki_id)
+        kontrol(f"bekleme dolunca 0 → 1: yeni olay ({len(h)} adet)", len(h) == 1)
+    except Exception as e:
+        print(f"    ✗ hata: {e}")
+        kontroller.append(False)
+
+    # Saf fonksiyon: (deger, saniye, beklenen)
+    adimlar = [(0, 0, None), (1, 1, "olay"), (1, 4, "suruyor"), (0, 7, None),
+               (1, 10, "bekleme"), (0, 13, None), (1, 30.9, "bekleme"), (1, 32, "suruyor"),
+               (0, 34, None), (1, 35, "olay")]
+    durum = {}
+    sonuc = [kurallar.hareket_gecisi(durum, deger, t, 30) for deger, t, _ in adimlar]
+    kontrol(f"hareket_gecisi birim testi ({len(adimlar)} adım, bekleme 30 sn)",
+            sonuc == [b for _, _, b in adimlar])
+    kontrol("bekleme düğüm başına: başka düğümde aynı anda 0 → 1 olay üretir",
+            kurallar.hareket_gecisi({}, 1, 10, 30) == "olay")
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
+
+def test_cevrimdisi_tolerans():
+    """
+    T18: LWT "offline" sonrası düğüm CEVRIMDISI_TOLERANS_SN içinde "online"
+    olursa çevrimdışı olayı üretilmez; gelmezse süre dolunca tek olay oluşur.
+    """
+    tolerans = config.CEVRIMDISI_TOLERANS_SN
+    print(f"\n[T18] Çevrimdışı toleransı ({tolerans:g} sn, {DUGUM})")
+    kontroller = []
+
+    def kontrol(ad, kosul):
+        print(f"    {'✓' if kosul else '✗'} {ad}")
+        kontroller.append(bool(kosul))
+
+    def cevrimdisi_olaylari(onceki_id):
+        return [o for o in yeni_olaylar(onceki_id) if o["sensor"] == "durum"]
+
+    def baglan():
+        c = sahte_veri.istemci_olustur(DUGUM, client_id="test-lwt")
+        sahte_veri.durum_yayinla(c, DUGUM, online=True).wait_for_publish(2)
+        return c
+
+    client = None
+    try:
+        # a) kısa kopma: LWT → ~1 sn sonra geri bağlan
+        client = baglan()
+        time.sleep(1)
+        onceki_id = son_olay_id()
+        sahte_veri.baglantiyi_kopar(client)
+        lwt_geldi = durum_bekle(lambda d: d["son_durum"] == "offline")[0]
+        time.sleep(1)
+        client = baglan()
+        time.sleep(tolerans + 2)
+        kontrol(f"LWT {'geldi' if lwt_geldi else 'GELMEDİ'}, ~1 sn sonra online: "
+                f"{tolerans + 2:g} sn içinde çevrimdışı olayı yok",
+                lwt_geldi and not cevrimdisi_olaylari(onceki_id))
+        kontrol("panelde yine çevrimiçi", durum_bekle(lambda d: d["cevrimici"])[0])
+
+        # b) gerçek kopma: geri gelmez → tolerans dolunca tek olay
+        onceki_id = son_olay_id()
+        sahte_veri.baglantiyi_kopar(client)
+        client = None
+        bas = time.monotonic()
+        time.sleep(tolerans / 2)
+        kontrol(f"kopmadan {tolerans / 2:g} sn sonra henüz olay yok",
+                not cevrimdisi_olaylari(onceki_id))
+        olaylar = []
+        while time.monotonic() - bas < tolerans + 5 and not olaylar:
+            time.sleep(0.5)
+            olaylar = cevrimdisi_olaylari(onceki_id)
+        sure = time.monotonic() - bas
+        ozet = f"{olaylar[0]['seviye']} - {olaylar[0]['mesaj']}" if olaylar else "-"
+        kontrol(f"geri gelmeyince {sure:.1f} sn'de tek olay: {ozet}",
+                len(olaylar) == 1 and olaylar[0]["mesaj"] == "Cihaz çevrimdışı"
+                and tolerans <= sure < tolerans + 5)
+    except Exception as e:
+        print(f"    ✗ hata: {e}")
+        kontroller.append(False)
+    finally:
+        if client:
+            client.disconnect()       # temiz kapanış: LWT tetiklenmez
+            client.loop_stop()
+
+    basarili = bool(kontroller) and all(kontroller)
+    print(f"    {'✓ BAŞARILI' if basarili else '✗ BAŞARISIZ'}")
+    return basarili
+
 
 def ws_mesaj_bekle(ws, kosul, sure=3.0):
     """Koşulu sağlayan ilk WS mesajı (yoksa None); diğer mesajlar atlanır."""
@@ -466,7 +623,7 @@ def test_yasam_dongusu(client, baslangic, operator):
 
     try:
         onceki_id = son_olay_id()
-        yayinla(client, "hareket", 1)
+        hareket_tetikle(client)
         time.sleep(1.5)
         olay = next((o for o in yeni_olaylar(onceki_id)
                      if o["sensor"] == "hareket" and o["seviye"] == "orta"), None)
@@ -677,7 +834,7 @@ def test_mod(client):
 
     def hareket_olayi():
         onceki_id = son_olay_id()
-        yayinla(client, "hareket", 1)
+        hareket_tetikle(client)
         time.sleep(1.5)
         return next((o for o in yeni_olaylar(onceki_id) if o["sensor"] == "hareket"), None)
 
@@ -846,7 +1003,7 @@ def test_kimlik(client, oturum):
                 sonuc == ["son_admin"] * 2)
 
         onceki_id = son_olay_id()
-        yayinla(client, "hareket", 1)
+        hareket_tetikle(client)
         time.sleep(1.5)
         olay = next((o for o in yeni_olaylar(onceki_id) if o["sensor"] == "hareket"), None)
         kod, v = api_istek(f"/api/olaylar/{olay['id']}/durum", "PATCH",
@@ -1004,12 +1161,15 @@ def testleri_calistir(client, baslangic, oturum):
     sonuclar.append(("T10", "Yangın teyidi (korelasyon)", test_korelasyon(client)))
     sonuclar.append(("T11", "Güvenlik modu (zaman kuralı)", test_mod(client)))
     sonuclar.append(("T12", "Kimlik doğrulama / yetki", test_kimlik(client, oturum)))
+    sonuclar.append(("T17", "Hareket kenarı + bekleme", test_hareket_kenar(client)))
+    sonuclar.append(("T18", "Çevrimdışı toleransı", test_cevrimdisi_tolerans()))
 
     # Özet
     print("\n" + "=" * 60)
     print("ÖZET")
     print("=" * 60)
-    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"]
+    sira = ["T1", "T2", "T2b", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12",
+            "T17", "T18"]
     for no, ad, sonuc in sorted(sonuclar, key=lambda x: sira.index(x[0])):
         if sonuc is True:
             durum = "BAŞARILI"
