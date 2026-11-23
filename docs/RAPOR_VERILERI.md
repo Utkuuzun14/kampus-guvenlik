@@ -693,7 +693,7 @@ MQTT sözleşmesi, kural motoru ve e-posta bildirimi değişmedi.
 
 ---
 
-## 10. Donanım ve firmware (27 Ekim 2026 eki)
+## 10. Donanım ve firmware (27 Ekim 2026 eki, 23 Kasım 2026 güncellemesi)
 
 Sahte üretecin yerini alan gerçek sensör düğümü. Ayrıntı ve kurulum: `firmware/README.md`.
 Kod: `firmware/src/main.cpp`, pin/ayar: `firmware/include/pinler.h`.
@@ -701,13 +701,13 @@ Kod: `firmware/src/main.cpp`, pin/ayar: `firmware/include/pinler.h`.
 | Bileşen | Seçim |
 |---|---|
 | Mikrodenetleyici | Wemos LOLIN S2 Mini (ESP32-S2, 240 MHz, 4 MB flash, 2 MB PSRAM, yerel USB CDC) |
-| Hareket | HC-SR501 PIR, OUT → GPIO 7 (aktif HIGH, iç pull-down), besleme VBUS 5 V |
-| Duman/gaz | MQ-2, AO → GPIO 3 (ADC1, 12 bit 0–4095, 11 dB, 10 örnek ortalaması), besleme 3V3 |
-| Alev | KY-026, DO → GPIO 5 (alev görünce LOW), besleme 3V3 |
+| Hareket | HC-SR501 PIR, OUT → GPIO 7 doğrudan (aktif HIGH, iç pull-down; modül çıkışı 3,3 V), besleme VBUS 5 V |
+| Duman/gaz | MQ-2, AO → 2×10 kΩ bölücü → GPIO 3 (en fazla 2,5 V; ADC1, 12 bit 0–4095, 11 dB, 10 örnek ortalaması), besleme VBUS 5 V |
+| Alev | KY-026, DO → 10 kΩ + 20 kΩ bölücü → GPIO 5 (~3,3 V; alev görünce LOW), besleme VBUS 5 V |
 | Durum göstergesi | dahili LED GPIO 15: bağlanırken 1 Hz, bağlıyken sabit, olayda hızlı yanıp söner |
 | Geliştirme | PlatformIO Core 6.2.0, `espressif32@6.9.0` (Arduino-ESP32 2.0.17) |
 | Kütüphaneler | `256dpi/MQTT@2.5.2` (QoS 1 yayın + LWT; PubSubClient QoS 1 yayınlayamaz), `bblanchon/ArduinoJson@7.2.1` |
-| Derleme boyutu | RAM 51 984 / 327 680 bayt (%15,9), Flash 722 462 / 1 310 720 bayt (%55,1) |
+| Derleme boyutu | RAM 52 192 / 327 680 bayt (%15,9), Flash 728 038 / 1 310 720 bayt (%55,5) — üç sensör açık |
 
 Sözleşme uyumu (`scripts/sahte_veri.py` ile birebir): konular `kampus/guvenlik/<dugum>/{duman,hareket,alev,durum}`,
 JSON alanları `dugum, sensor, deger, zaman`, QoS 1, retain yok, keepalive 60 sn, LWT `.../durum` ←
@@ -719,7 +719,43 @@ Dayanıklılık: Wi-Fi koparsa 2 → 60 sn artan beklemeyle, MQTT koparsa 2 → 
 yeniden bağlanır; döngü `millis()` tabanlı ve bloklamasızdır. PIR ve MQ-2 ilk 60 sn (ısınma)
 yayınlanmaz. Hareket/alev 3 sn'lik tur içinde kilitlenir, kısa darbe kaçmaz.
 
-Durum (27.10.2026): PIR açık; MQ-2 ve alev besleme sorunu çözülene kadar derleme ayarıyla kapalı
-(`MQ2_AKTIF 0`, `ALEV_AKTIF 0` → hiç okunmaz, hiç yayınlanmaz). Gerçek kart `dugum1` iken sahte
-üreteç `--dugumler dugum2,dugum3` ile çalışır. Kablolama sorunları için `TESHIS_MODU` (ağsız,
-GPIO 1–14 dijital + GPIO 1–10 analog, 500 ms).
+### Bağlantı şeması (23.11.2026)
+
+| Sensör | Besleme | Çıkış → kart |
+|---|---|---|
+| PIR (HC-SR501) | VBUS 5 V | OUT → GPIO 7 (doğrudan) |
+| MQ-2 | VBUS 5 V | AO → 10 kΩ → GPIO 3; GPIO 3 → 10 kΩ → GND |
+| Alev (KY-026) | VBUS 5 V | DO → 10 kΩ → GPIO 5; GPIO 5 → 20 kΩ → GND |
+
+Neden 5 V ve gerilim bölücü: ilk kurulumda MQ-2 ve alev modülü 3V3 hattından
+besleniyordu; 3V3 hattı bu sensörleri besleyemedi (MQ-2'nin ısıtıcısı 5 V için
+tasarlanmış, ~150 mA çeker). Üç sensör de VBUS'a (USB 5 V) alındı. 5 V'la beslenen
+modüllerin çıkışı 5 V'a çıkabildiği, ESP32-S2 pinleri ise en fazla 3,3 V kabul
+ettiği için çıkışlar bölündü: MQ-2 AO 5 V × 1/2 = en fazla 2,5 V (11 dB ADC
+aralığında), alev DO 5 V × 20/30 ≈ 3,3 V. PIR modülü kendi 3,3 V regülatörüyle
+çıkış verdiği için doğrudan bağlı. Firmware'de değişiklik yalnızca derleme
+ayarı: `MQ2_AKTIF 1`, `ALEV_AKTIF 1` (pinler 7/3/5 ve `ALEV_AKTIF_DUSUK` aynı).
+
+### Ölçülen değerler (23.11.2026, sensor_gecmis)
+
+| Sensör | Durum | Değer |
+|---|---|---|
+| MQ-2 | temiz hava, ısınma sonrası | ham 285–352, ortalama ~312 (156 ölçüm) |
+| MQ-2 | bütan gazı | 2831 (eşik aşımı anı) – 3367 (tepe); 1800 eşiği aşıldı, 1600 altına inince normale döndü |
+| Alev | alev yok / çakmak 20–30 cm | DO HIGH (0) / LOW (1) |
+| PIR | önü kapalı / el sallama | 60 sn+ olay yok / "Hareket algılandı" |
+
+### Gerçek donanım testleri (docs/TEST_SONUCLARI.md)
+
+| Test | Senaryo | Sonuç | Durum |
+|---|---|---|---|
+| T13 | Güç/bağlantı: 5 V besleme + bölücüler, Wi-Fi + MQTT, 3 sn yayın | bağlandı, 3 sn'de bir duman → hareket → alev | BAŞARILI |
+| T14 | PIR: önü kapalıyken olay yok, el sallayınca hareket | 17:44:49–17:46:18 olay yok; el sallayınca "Hareket algılandı" | BAŞARILI |
+| T15 | Alev: çakmak 20–30 cm | kritik "ALEV ALGILANDI" (#2382, 23.11.2026 17:48) | BAŞARILI |
+| T16 | Duman: temizde ~300, bütan gazı | 2831 → yüksek "Duman/gaz eşiği aşıldı" (#2425, 23.11.2026 17:51) | BAŞARILI |
+
+Durum (23.11.2026): üç sensör açık ve gerçek donanımla doğrulandı. Gerçek kart
+`dugum1` iken sahte üreteç `--dugumler dugum2,dugum3` ile çalışır. Açık konu:
+test süresince kart 27 kez bağlantıyı yenileyip 1–2 sn'de geri bağlandı (yayın
+zaman aşımı; bkz. TEST_SONUCLARI notları). Kablolama sorunları için `TESHIS_MODU`
+(ağsız, GPIO 1–14 dijital + GPIO 1–10 analog, 500 ms).

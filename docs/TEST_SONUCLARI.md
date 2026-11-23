@@ -13,6 +13,9 @@ geçişleri operatör token'ıyla yapılır; sonda bu kullanıcılar ve giriş k
 Ortam: Mosquitto broker + FastAPI backend + SQLite (sahte üreteç kapalı,
 e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfırlandı
 (yedek: backend/yedekler/kampus_20261012_1538.db); olay id'leri bu yüzden küçüktür.
+Gerçek donanım testleri (T13-T16): 23 Kasım 2026, 17:31-18:03, elle. Düğüm `dugum1`
+= Wemos LOLIN S2 Mini (firmware/), sahte üreteç kapalı, mod otomatik (mesai saati).
+Sonuçlar panelden ve veritabanındaki olay kayıtlarından doğrulandı.
 
 | Test | Senaryo | Gönderilen | Beklenen | Sonuç | Durum |
 |------|---------|-----------|----------|-------|-------|
@@ -29,6 +32,10 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
 | T10 | Yangın teyidi (korelasyon) — 15 Ekim 2026 | duman 2500 → 2 sn → alev=1; yangın sürerken duman 2900, alev 1→0→1; normale dönüş → yeniden yangın; ters sıra (alev → 2 sn → duman); kural fonksiyonu birim testi | tek yangin_teyit (kritik), iliskili = [duman, alev]; sürerken yeni teyit yok; normalden sonra yeni teyit; ters sırada teyit; pencere dışında (11 sn) teyit yok; mail konusu "YANGIN TEYİTLİ" | 12/12 kontrol geçti | BAŞARILI |
 | T11 | Güvenlik modu ve zamana bağlı hareket kuralı — 15 Ekim 2026 | PUT mesai / mesai_disi / gece + her birinde hareket=1; PUT "tatil" ve boş gövde; hareket_seviyesi("otomatik", t) birim testi | mesai → bilgi (otomatik çözülmüş), mesai_disi → orta, gece → yuksek; WS "mod" mesajı; geçersiz → 422; hafta içi 10:00 bilgi, 20:00 orta, 02:00 yüksek, cumartesi 11:00 orta | 10/10 kontrol geçti (saat eşlemesi 9/9 vaka) | BAŞARILI |
 | T12 | Kimlik doğrulama ve yetkilendirme — 15 Ekim 2026 | token'sız / sahte imzalı / süresi dolmuş istek; yanlış parola, olmayan kullanıcı, pasif kullanıcı; 6 hatalı giriş; operatör ve admin ile PUT mod, /api/kullanicilar; admin kendini pasif yapma; operatör PATCH durum; WS token'sız / bozuk / geçerli | 401 (genel mesaj); 429 + Retry-After; operatör 403, admin 200 + degistiren; 409; kim = operatörün adı; WS 4401; /api/saglik 200; hiçbir yanıtta parola özeti yok | 18/18 kontrol geçti | BAŞARILI |
+| T13 | Güç ve bağlantı (gerçek donanım) — 23 Kasım 2026 | sensörler VBUS 5 V'tan; MQ-2 AO 2x10k, alev DO 10k+20k gerilim bölücüyle ESP32-S2'ye | Wi-Fi + MQTT bağlantısı, 3 sn yayın aralığı | Wi-Fi ve MQTT bağlandı (192.168.1.9:1883, LWT + online), duman → hareket → alev 3 sn'de bir | BAŞARILI |
+| T14 | Hareket algılama (PIR, gerçek donanım) — 23 Kasım 2026 | sensörün önü kapatıldı, sonra önünde el sallandı | kapalıyken olay yok, el sallanınca hareket olayı | kapalıyken 60 sn+ olay yok (17:44:49 → 17:46:18 arası hareket olayı yok); el sallanınca "Hareket algılandı" | BAŞARILI |
+| T15 | Alev algılama (KY-026, gerçek donanım) — 23 Kasım 2026 | çakmak, 20-30 cm mesafe | kritik olay | #2382 kritik - "ALEV ALGILANDI" (17:48:56); çakmak çekilince #2393 bilgi - "Alev söndü" | BAŞARILI |
+| T16 | Duman/gaz eşik aşımı (MQ-2, gerçek donanım) — 23 Kasım 2026 | ısınma sonrası temiz hava → bütan gazı | temizde alarm yok, gazda 1800 eşiği aşılınca yüksek uyarı | temizde ham ~300; gazda 2831 → #2425 yüksek - "Duman/gaz eşiği aşıldı" (17:51:04); 1292'ye inince #2432 bilgi - "normale döndü" | BAŞARILI |
 
 ## Notlar
 - Testler test_dugum düğümü ile yapıldı; çalışma sonunda bu düğümün kayıtları
@@ -153,3 +160,20 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
 - Göç (15 Ekim 2026, 12:50): ilk açılışta olaylar tablosuna 6 kolon eklendi; mevcut
   4 orta (hareket) kayıt `cozuldu` / `sistem (göç)`, 3 uyari kayıt `cozuldu` /
   `sistem` oldu. Göç öncesi yedek: backend/yedekler/kampus_20261015_1238_goconcesi.db.
+- T13-T16 (23 Kasım 2026, gerçek donanım): bağlantı şeması ve bölücü hesapları
+  firmware/README.md ve RAPOR_VERILERI.md §10'da. Ölçümler (sensor_gecmis, dugum1):
+  - MQ-2 temiz hava, ısınma sonrası: 17:40-17:48 arası 156 ölçümde 285-352,
+    ortalama 312. Gaz verilince 3 sn'lik turlarda 276 → 383 → 438 → 397 → 319 →
+    2831 → 3367 (tepe) → 2779 → 1854 → 2807 → 1722 → 1292. Histerezis sayesinde
+    tek yüksek (2831) ve tek bilgi (1292 < 1600) olayı oluştu, aradaki
+    dalgalanma yeni alarm üretmedi.
+  - Alev: alev yokken DO sürekli HIGH (alev=0); çakmakla kritik olay (17:48:56),
+    17:49:27'de "Alev söndü" (bilgi).
+  - PIR: mesai saatinde hareket = bilgi seviyesi, otomatik çözülmüş olay
+    (kural=mesai). Test süresince sensör çoğu 3 sn'lik turda
+    hareket bildirdi (dakikada ~15-20 olay); süre/hassasiyet potları ayarlanacak.
+  - Bağlantı: test süresince broker'da 27 kez "Cihaz çevrimdışı" (LWT) olayı
+    görüldü; kart her seferinde 1-2 sn içinde yeniden bağlanıp `online` yayınladı
+    (broker kaydı: "session taken over" / "connection closed by client"; kart yayın
+    zaman aşımında bağlantıyı kendisi yeniliyor). Kopma anındaki yayınlar
+    "YAYINLANAMADI" ile düşebiliyor; bağlantı kararlılığı ayrıca iyileştirilecek.
