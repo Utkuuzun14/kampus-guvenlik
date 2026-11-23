@@ -15,6 +15,9 @@ Akıllı kurallar:
 - Yangın teyidi (korelasyon): aynı düğümde duman alarma girişi ve alev=1,
   sıra fark etmeksizin KORELASYON_PENCERE_SN içinde gelirse bileşik
   "yangin_teyit" olayı. Saf fonksiyon: korelasyon. Durum bellekte tutulur.
+- Hareket: olay yalnızca 0 → 1 geçişinde ve aynı düğümün son hareket
+  olayından HAREKET_BEKLEME_SN geçmişse. PIR her 3 sn'lik turda 1 yayınlasa
+  da tek olay oluşur. Saf fonksiyon: hareket_gecisi. Durum bellekte tutulur.
 """
 import threading
 import time
@@ -179,6 +182,39 @@ def teyit_mesaji(dugum):
     return f"Yangın teyitli: duman + alev ({konum})"
 
 
+# ---------------- Hareket: kenar algılama + bekleme ----------------
+
+# dugum -> {"son": son hareket değeri (0/1), "olay_zaman": son olayın zamanı | None}
+_hareket = {}
+
+
+def hareket_gecisi(durum, deger, simdi, bekleme):
+    """
+    Saf hareket adımı; düğümün `durum` sözlüğünü yerinde günceller.
+    Dönüş: "olay" (0 → 1 ve bekleme dolmuş), "bekleme" (0 → 1 ama son olaydan
+    `bekleme` sn geçmemiş), "suruyor" (1 → 1) ya da None (hareket yok).
+    Backend yeniden başlarsa önceki değer 0 sayılır: ilk 1 olay üretir.
+    """
+    onceki = durum.get("son", 0)
+    durum["son"] = 1 if deger == 1 else 0
+    if deger != 1:
+        return None
+    if onceki == 1:
+        return "suruyor"
+    son_olay = durum.get("olay_zaman")
+    if son_olay is not None and simdi - son_olay < bekleme:
+        return "bekleme"
+    durum["olay_zaman"] = simdi
+    return "olay"
+
+
+def hareket_bildir(dugum, deger):
+    """Dinleyiciden çağrılır: düğümün hareket durumunu ilerletir."""
+    with _kilit:
+        durum = _hareket.setdefault(dugum, {})
+        return hareket_gecisi(durum, deger, _saat(), config.HAREKET_BEKLEME_SN)
+
+
 # ---------------- Değerlendirme ----------------
 
 def degerlendir(dugum, sensor, deger, mod=None, simdi=None):
@@ -192,9 +228,15 @@ def degerlendir(dugum, sensor, deger, mod=None, simdi=None):
     Hareket için mod/simdi verilmezse kalıcı mod ve sunucu saati kullanılır.
     """
     if sensor == "hareket":
-        if deger == 1:
+        gecis = hareket_bildir(dugum, deger)
+        if gecis == "olay":
             seviye, kural, mesaj = hareket_seviyesi(mod or mod_getir(), simdi or simdi_yerel())
             return True, seviye, mesaj, kural
+        if gecis == "bekleme":
+            return False, "bilgi", (f"Hareket (son olaydan {config.HAREKET_BEKLEME_SN:g} sn "
+                                    "geçmedi, olay yok)"), None
+        if gecis == "suruyor":
+            return False, "bilgi", "Hareket sürüyor", None
         return False, "bilgi", "Hareket yok", None
 
     if sensor == "duman":

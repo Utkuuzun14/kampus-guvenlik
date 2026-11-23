@@ -41,6 +41,9 @@ CEVRIMDISI_SANIYE = int(os.getenv("CEVRIMDISI_SANIYE", "30"))
 # LWT "offline" geldikten sonra düğüm bu süre içinde "online" olursa "Cihaz
 # çevrimdışı" olayı üretilmez (kısa yeniden bağlanma). 0 = hemen olay.
 CEVRIMDISI_TOLERANS_SN = float(os.getenv("CEVRIMDISI_TOLERANS_SN", "10"))
+# Hareket olayı yalnızca 0 → 1 geçişinde; aynı düğümde bir hareket olayından
+# sonra bu süre dolmadan yeni hareket olayı üretilmez.
+HAREKET_BEKLEME_SN = float(os.getenv("HAREKET_BEKLEME_SN", "30"))
 
 # ---------------- Akıllı kurallar ----------------
 # Yangın teyidi: aynı düğümde duman alarmı ve alev bu kadar saniye içinde
