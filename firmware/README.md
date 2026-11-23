@@ -100,36 +100,54 @@ copy firmware\include\gizli.example.h firmware\include\gizli.h
 
 | Alan | Ne yazılır |
 |---|---|
-| `WIFI_SSID`, `WIFI_PAROLA` | Kartın bağlanacağı **2.4 GHz** ağ (aşağıdaki Wi-Fi notu) |
-| `MQTT_HOST` | Mosquitto'nun çalıştığı bilgisayarın yerel IP'si (adım 3) |
+| `WIFI_SSID`, `WIFI_PAROLA` | Ağ 1, ör. ev ağı (**2.4 GHz**, aşağıdaki Wi-Fi notu) |
+| `WIFI2_SSID`, `WIFI2_PAROLA` | Ağ 2, ör. iPhone Kişisel Erişim Noktası; kullanılmıyorsa `""` |
+| `MQTT_MDNS` | Bilgisayarın adı (`hostname` komutu), `.local` olmadan; `""` = mDNS kapalı |
+| `MQTT_HOST`, `MQTT_HOST2` | Yedek: mDNS çözülemezse ağ 1 / ağ 2'deki bilgisayar IP'si (adım 3); `""` = yedek yok |
 | `MQTT_PORT` | `1883` |
 | `MQTT_KULLANICI`, `MQTT_PAROLA` | Mosquitto `passwd` kullanıcısı (backend'in kullandığı kullanıcı) |
 | `DUGUM_ID` | `"dugum1"` |
 
 `gizli.h` yoksa derleme şu hatayla durur: `include/gizli.h bulunamadi: ...`.
+Eski bir `gizli.h`'de `WIFI2_*`, `MQTT_HOST2`, `MQTT_MDNS` yoksa boş sayılır (tek ağ, sabit IP).
 
-## 3. Bilgisayarın IP'sini bulma
+**SSID birebir aynı olmalı** (büyük/küçük harf, boşluk, kesme işareti). iPhone'da erişim
+noktasının adı Ayarlar > Genel > Hakkında > Ad'dır; emin olmak için bilgisayar o ağa
+bağlıyken `netsh wlan show interfaces` çıktısındaki `SSID` satırına bakın.
 
-Bilgisayar, kartın bağlanacağı ağa (ör. telefon hotspot'u) bağlıyken:
+## 3. Broker adresi: mDNS, yedek olarak sabit IP
+
+Kart her MQTT bağlantısından önce `<MQTT_MDNS>.local`'ı mDNS ile çözer. Windows 10/11
+bilgisayar adına mDNS ile kendiliğinden cevap verir (DNS İstemcisi hizmeti, "mDNS (UDP-Gelen)"
+güvenlik duvarı kuralı Ortak profilde de açık). Böylece bilgisayarın IP'si ağdan ağa değişse de
+yeniden yükleme gerekmez. Denendi (23.11.2026): ev ağında `Utku.local -> 192.168.1.9`, iPhone
+erişim noktasında `Utku.local -> 172.20.10.3`.
+
+mDNS çözülemezse bağlı ağın `MQTT_HOST` / `MQTT_HOST2`'si kullanılır. IP'yi bulmak için
+bilgisayar o ağa bağlıyken:
 
 ```bash
 ipconfig
 ```
 
-O ağın bağdaştırıcısındaki (genelde "Kablosuz LAN bağdaştırıcısı Wi-Fi") **IPv4 Adresi**
-satırını `MQTT_HOST`'a yazın (ör. `192.168.43.120`). Ağ değişirse IP de değişir; o zaman
-`gizli.h`'yi güncelleyip yeniden yükleyin.
+"Kablosuz LAN bağdaştırıcısı Wi-Fi" altındaki **IPv4 Adresi** (ör. `192.168.1.9`).
 
 ## 4. Windows Güvenlik Duvarı: 1883'e gelen bağlantı izni
 
-Yönetici PowerShell/cmd'de bir kez:
+TCP 1883 kuralı **tüm profillerde** (Etki alanı, Özel, Ortak) geçerli olmalı: telefon erişim
+noktası Windows'ta genelde "Ortak" profilde açılır. Kontrol (yönetici gerekmez):
+
+```powershell
+Get-NetFirewallRule -Direction Inbound -Enabled True | Where-Object { ($_ | Get-NetFirewallPortFilter).LocalPort -contains '1883' } | Select-Object DisplayName,Profile,Action
+```
+
+`Profile` sütunu `Any` olmalı. Kural yoksa yönetici PowerShell/cmd'de bir kez:
 
 ```bash
-netsh advfirewall firewall add rule name="Mosquitto MQTT 1883" dir=in action=allow protocol=TCP localport=1883
+netsh advfirewall firewall add rule name="Mosquitto 1883" dir=in action=allow protocol=TCP localport=1883 profile=any
 ```
 
 Mosquitto'nun ağdan dinlediğini (`listener 1883 0.0.0.0`) `backend/mosquitto.conf`'ta kontrol edin.
-Hotspot ağı Windows'ta "Ortak" profilde olabilir; kural tüm profillere uygulanır.
 
 ## 5. Derleme ve yükleme
 
@@ -159,8 +177,14 @@ pio device monitor
 115200 baud, USB CDC. Örnek çıktı:
 
 ```
-[SENSOR] PIR (GPIO 7): açık | MQ-2 (GPIO 3): KAPALI | Alev (GPIO 5): KAPALI
-[WiFi] Bağlandı. IP: 192.168.43.57, sinyal: -52 dBm
+[SENSOR] PIR (GPIO 7): açık | MQ-2 (GPIO 3): açık | Alev (GPIO 5): açık
+[WiFi] Ağlar taranıyor...
+[WiFi] Tarama bitti: 9 ağ, 7017 ms.
+[WiFi] Bilinen ağ 1 görünüyor: 'ev-agi' (-68 dBm)
+[WiFi] Ağ 1 'ev-agi' ağına bağlanılıyor...
+[WiFi] Bağlandı (ağ 1). IP: 192.168.1.18, sinyal: -67 dBm
+[MQTT] mDNS: Utku.local -> 192.168.1.9
+[MQTT] 192.168.1.9:1883 adresine bağlanılıyor (istemci: esp32-dugum1)...
 [MQTT] Bağlandı (LWT kuruldu: offline, QoS 1).
 [MQTT] -> kampus/guvenlik/dugum1/durum {"dugum":"dugum1","durum":"online","zaman":0}
 [ISINMA] PIR/MQ-2 ısınıyor: 45 sn kaldı (bu sürede yayınlanmaz)
@@ -183,16 +207,44 @@ python scripts/sahte_veri.py --dugumler dugum2,dugum3
 `scripts\baslat.bat` üç düğümü birden başlatır; kart takılıyken onun "Sahte Veri" penceresini
 kapatıp yukarıdaki komutu kullanın, yoksa dugum1 için iki kaynak karışır.
 
+## 8. Okulda kurulum (iPhone erişim noktası, yeniden yükleme yok)
+
+Kart evde ve okulda aynı firmware'le çalışır; `gizli.h`'de iki ağ ve `MQTT_MDNS` dolu olmalı.
+
+1. **iPhone:** Ayarlar > Kişisel Erişim Noktası > "Başkalarının Katılmasına İzin Ver" açık,
+   **"Uyumluluğu En Üst Düzeye Çıkar" açık** (2.4 GHz; kapalıysa kart ağı göremez). Kurulum
+   sırasında bu ekranı açık tutun: iPhone ağı ancak o ekran açıkken ya da bir cihaz bağlıyken
+   yayınlar.
+2. **Bilgisayar:** Wi-Fi'dan iPhone erişim noktasına bağlanın (okul ağına değil).
+3. **Mosquitto, backend, panel:** her zamanki gibi başlatın (`scripts\baslat.bat` ya da elle).
+   Panel ve backend `localhost` kullandığı için ağ değişince ayar gerekmez.
+4. **Kartı** USB'den (bilgisayar ya da powerbank) besleyin. Açılışta ağları tarar (~7 sn),
+   erişim noktasına bağlanır, `<MQTT_MDNS>.local`'ı çözer ve MQTT'ye bağlanır. LED sabit
+   yanınca hazırdır; panelde dugum1 çevrimiçi olur (PIR/MQ-2 verisi 60 sn ısınmadan sonra).
+5. Olmazsa `pio device monitor` ile seri çıktıya bakın:
+   - `Denenecek bilinen ağ yok` → SSID yanlış ya da erişim noktası 2.4 GHz değil (adım 1, adım 2'deki SSID notu).
+   - `Bağlanamadı (bağlantı reddedildi (parola?))` → `WIFI2_PAROLA` yanlış.
+   - `mDNS: ... çözülemedi` ve `broker adresi yok` → `MQTT_HOST2`'ye bilgisayarın erişim
+     noktasındaki IP'sini yazıp (ipconfig, genelde `172.20.10.x`) yeniden yükleyin.
+   - `Görünen bilinen ağların hepsi bu tur denendi` → bilgisayar aynı ağda değil ya da
+     Mosquitto kapalı / 1883 güvenlik duvarında kapalı (adım 4).
+
+**Ağ seçimi nasıl çalışır:** kart görünen bilinen ağlardan, son MQTT'ye bağlandığı ağı
+önce dener (açılışta ağ 1). O ağda broker'a 3 denemede (~15 sn) ulaşamazsa (bilgisayar başka
+ağda) ağı bırakıp diğer bilinen ağa geçer; hiçbiri olmazsa artan beklemeyle baştan tarar.
+Böylece evde iki ağ birden görünse de bilgisayarın bağlı olduğu ağı bulur. Denendi
+(23.11.2026): bilgisayar erişim noktasındayken kart ev ağından erişim noktasına, bilgisayar
+eve dönünce erişim noktasından ev ağına kendiliğinden geçti (her biri ~20–30 sn).
+
 ## Wi-Fi notu
 
 - ESP32-S2 **yalnızca 2.4 GHz** destekler. 5 GHz ağlar listede bile görünmez.
 - **eduroam** (WPA2-Enterprise) ve yurt ağları (tarayıcıdan giriş/captive portal, istemciler arası
-  engelleme) çalışmaz. Bunun yerine **telefon hotspot'u** kullanın, bant ayarını **2.4 GHz**
+  engelleme) çalışmaz. Bunun yerine **telefon erişim noktası** kullanın, bant ayarını **2.4 GHz**
   yapın (iPhone: "Uyumluluğu En Üst Düzeye Çıkar").
-- **Bilgisayar ve kart aynı ağda olmalı** (bilgisayar da hotspot'a bağlanır); `MQTT_HOST` o
-  ağdaki IP'dir.
+- **Bilgisayar ve kart aynı ağda olmalı** (bilgisayar da erişim noktasına bağlanır).
 - Kart bağlanamazsa seri çıktıda durumu ve 2.4 GHz hatırlatmasını yazar, artan beklemeyle
-  (2 → 4 → … → 60 sn) yeniden dener. Bazı S2 Mini kartlar tam güçte bağlanamıyor:
+  (2 → 4 → … → 60 sn) yeniden tarar. Bazı S2 Mini kartlar tam güçte bağlanamıyor:
   `pinler.h`'de `WIFI_DUSUK_GUC 1` yapıp deneyin.
 
 ## Teşhis modu
