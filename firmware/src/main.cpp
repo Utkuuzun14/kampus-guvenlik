@@ -36,7 +36,10 @@
 #define ISTEMCI_ONEK "esp32-"
 #define KONU_ONEK    "kampus/guvenlik/" DUGUM_ID "/"
 #define MQTT_KEEPALIVE_SN 60
-#define MQTT_ZAMAN_ASIMI_MS 2000
+// CONNACK/PUBACK/PINGRESP için bekleme. Kütüphane süre dolunca bağlantıyı kapatır;
+// 2 sn'de birkaç saniyelik Wi-Fi gecikmesi kopmaya yetiyordu (23.11.2026: 30 dk'da
+// 27 yeniden bağlanma). Normalde PUBACK birkaç ms'de gelir, döngü beklemez.
+#define MQTT_ZAMAN_ASIMI_MS 8000
 
 #define NTP_SUNUCU1 "tr.pool.ntp.org"
 #define NTP_SUNUCU2 "pool.ntp.org"
@@ -277,7 +280,7 @@ static void mqttDongu() {
   if (millis() - mqttSonDeneme < mqttBekleme) return;
   mqttSonDeneme = millis();
 
-  // Tek deneme en fazla ~3 sn sürer (TCP bağlantısı + CONNACK); döngü
+  // Tek deneme en fazla ~MQTT_ZAMAN_ASIMI_MS sürer (TCP + CONNACK); döngü
   // bunun dışında hiç beklemez, denemeler arası bekleme millis() ile.
   Serial.printf("[MQTT] %s:%d adresine bağlanılıyor (istemci: %s)...\n",
                 MQTT_HOST, MQTT_PORT, istemciId);

@@ -19,7 +19,7 @@ biçimde yayınlar (`docs/SOZLESMELER.md` §2–§3); backend ve panel değişme
 | Yayın kuralı | her 3 sn'de bir tur, sıra: duman → hareket → alev; QoS 1, retain yok |
 | Online | her bağlanışta `.../durum` ← `{"dugum":"dugum1","durum":"online","zaman":<epoch>}` (QoS 1) |
 | LWT | `.../durum` ← `{"dugum":"dugum1","durum":"offline","zaman":0}` (QoS 1, retain yok) |
-| keepalive | 60 sn, clean session |
+| keepalive | 60 sn, clean session; CONNACK/PUBACK bekleme 8 sn (`MQTT_ZAMAN_ASIMI_MS`), Wi-Fi modem uykusu kapalı |
 | client_id | `esp32-<DUGUM_ID>` (sahte üreteç: `sahte-<dugum>`) |
 | zaman | NTP'den epoch saniye (`tr.pool.ntp.org`, `pool.ntp.org`, Europe/Istanbul); saat gelmeden `0` → backend kendi saatini yazar |
 
