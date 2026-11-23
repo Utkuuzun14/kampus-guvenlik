@@ -18,6 +18,12 @@ olay_geri_cagirma = None
 # Backend'in broker bağlantısı (/api/saglik bunu döndürür)
 bagli = False
 
+# Çevrimdışı toleransı: dugum -> bekleyen threading.Timer. LWT "offline"
+# gelince olay CEVRIMDISI_TOLERANS_SN sonra yazılır; o sürede "online" gelirse
+# zamanlayıcı iptal edilir ve olay üretilmez (kısa yeniden bağlanma).
+_cevrimdisi_bekleyen = {}
+_cevrimdisi_kilit = threading.Lock()
+
 
 def _dugum_cikar(topic):
     """kampus/guvenlik/<dugum>/<sensor> -> (dugum, sensor)"""
@@ -68,6 +74,10 @@ def _on_message(client, userdata, msg):
     except Exception as e:
         print(f"[DB] gecmis_ekle hatası: {e}")
 
+    if sensor == "durum":
+        _durum_isle(client, dugum, deger, zaman)
+        return
+
     # Kural motoruyla değerlendir
     alarm_var, seviye, mesaj, kural = kurallar.degerlendir(dugum, sensor, deger)
 
@@ -87,6 +97,45 @@ def _on_message(client, userdata, msg):
         print(f"[KORELASYON] {dugum}: yangın teyitli, ilişkili olaylar {iliskili}")
         _olay_isle(client, dugum, "yangin_teyit", duman, "kritik",
                    kurallar.teyit_mesaji(dugum), zaman, "korelasyon", iliskili)
+
+
+def _durum_isle(client, dugum, deger, zaman):
+    """online/offline: offline olayı tolerans süresi kadar ertelenir."""
+    tolerans = config.CEVRIMDISI_TOLERANS_SN
+    with _cevrimdisi_kilit:
+        bekleyen = _cevrimdisi_bekleyen.pop(dugum, None)
+        if bekleyen:
+            bekleyen.cancel()
+        if deger == 1:
+            if bekleyen:
+                print(f"[OLAY] {dugum}/durum online -> {tolerans:g} sn içinde geri bağlandı, "
+                      "çevrimdışı olayı üretilmedi")
+            else:
+                print(f"[OLAY] {dugum}/durum online")
+            return
+        if tolerans > 0:
+            zamanlayici = threading.Timer(tolerans, _cevrimdisi_kesinlestir,
+                                          (client, dugum, zaman))
+            zamanlayici.daemon = True
+            _cevrimdisi_bekleyen[dugum] = zamanlayici
+            zamanlayici.start()
+            print(f"[OLAY] {dugum}/durum offline -> {tolerans:g} sn içinde geri gelmezse olay")
+            return
+    _cevrimdisi_kesinlestir(client, dugum, zaman, beklemeden=True)
+
+
+def _cevrimdisi_kesinlestir(client, dugum, zaman, beklemeden=False):
+    """Tolerans doldu (ya da tolerans 0): 'Cihaz çevrimdışı' olayını yazar."""
+    with _cevrimdisi_kilit:
+        if not beklemeden:
+            zamanlayici = _cevrimdisi_bekleyen.get(dugum)
+            if zamanlayici is None or zamanlayici is not threading.current_thread():
+                return  # bu arada online geldi ya da yeni bir offline bekliyor
+            del _cevrimdisi_bekleyen[dugum]
+    alarm_var, seviye, mesaj, kural = kurallar.degerlendir(dugum, "durum", 0)
+    print(f"[OLAY] {dugum}/durum offline -> {seviye}: {mesaj}")
+    if alarm_var:
+        _olay_isle(client, dugum, "durum", 0, seviye, mesaj, zaman, kural)
 
 
 def _son_duman(dugum):

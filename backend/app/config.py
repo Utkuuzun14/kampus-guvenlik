@@ -38,6 +38,9 @@ ESIK_DUMAN = int(os.getenv("ESIK_DUMAN", "1800"))
 ESIK_DUMAN_NORMAL = int(os.getenv("ESIK_DUMAN_NORMAL", "1600"))
 # Bir düğümden kaç saniye haber gelmezse "çevrimdışı" sayılsın.
 CEVRIMDISI_SANIYE = int(os.getenv("CEVRIMDISI_SANIYE", "30"))
+# LWT "offline" geldikten sonra düğüm bu süre içinde "online" olursa "Cihaz
+# çevrimdışı" olayı üretilmez (kısa yeniden bağlanma). 0 = hemen olay.
+CEVRIMDISI_TOLERANS_SN = float(os.getenv("CEVRIMDISI_TOLERANS_SN", "10"))
 
 # ---------------- Akıllı kurallar ----------------
 # Yangın teyidi: aynı düğümde duman alarmı ve alev bu kadar saniye içinde
