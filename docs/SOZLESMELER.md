@@ -100,12 +100,12 @@ aşamasında güncellenebilir (yapılandırma dosyasından okunur).
 
 | Olay | Kaynak | Kural | Alarm seviyesi | Sistem tepkisi |
 |------|--------|-------|---------------|----------------|
-| Hareket | PIR | `deger == 1` | moda göre: bilgi / orta / yuksek (aşağıda) | Olay kaydı + panelde göster (yuksek: e-posta) |
+| Hareket | PIR | `0 → 1` geçişi, düğüm başına `HAREKET_BEKLEME_SN` (30) bekleme | moda göre: bilgi / orta / yuksek (aşağıda) | Olay kaydı + panelde göster (yuksek: e-posta) |
 | Duman/gaz | MQ-2 | normal → `deger > ESIK_DUMAN` (1800) geçişi | yuksek | Olay kaydı + alarm konusu + e-posta |
 | Duman normale döndü | MQ-2 | alarmda → `deger < ESIK_DUMAN_NORMAL` (1600) geçişi | bilgi | Olay kaydı |
 | Alev | KY-026 | `0 → 1` geçişi | kritik | Olay kaydı + alarm konusu + e-posta (öncelikli) |
 | Alev söndü | KY-026 | `1 → 0` geçişi | bilgi | Olay kaydı |
-| Cihaz çevrimdışı | ESP32 | `durum == "offline"` (LWT veya temiz kapanış) | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
+| Cihaz çevrimdışı | ESP32 | `durum == "offline"` (LWT veya temiz kapanış) ve `CEVRIMDISI_TOLERANS_SN` (10) içinde `online` gelmedi | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
 | Yangın teyidi | korelasyon | aynı düğümde duman alarmı + alev, `KORELASYON_PENCERE_SN` içinde | kritik | Ayrı bileşik olay + alarm konusu + e-posta ("YANGIN TEYİTLİ") |
 
 Alarm seviyeleri: `bilgi < uyari < orta < yuksek < kritik`
@@ -116,12 +116,12 @@ bunu rozet olarak gösterir. Kod: `backend/app/kurallar.py`.
 
 | Sensör | Koşul | Güvenlik modu (etkin) | Seviye | `kural` |
 |--------|-------|----------------------|--------|---------|
-| hareket | `deger == 1` | mesai | bilgi (otomatik çözülür) | `mesai` |
-| hareket | `deger == 1` | mesai_disi | orta | `mesai_disi` |
-| hareket | `deger == 1` | gece | yuksek | `gece_modu` |
+| hareket | `0 → 1` (+ bekleme) | mesai | bilgi (otomatik çözülür) | `mesai` |
+| hareket | `0 → 1` (+ bekleme) | mesai_disi | orta | `mesai_disi` |
+| hareket | `0 → 1` (+ bekleme) | gece | yuksek | `gece_modu` |
 | duman | normal → `> 1800` / alarmda → `< 1600` | — | yuksek / bilgi | `histerezis` |
 | alev | `0 → 1` / `1 → 0` | — | kritik / bilgi | `histerezis` |
-| durum | `offline` | — | uyari | `baglanti` |
+| durum | `offline`, 10 sn içinde `online` yok | — | uyari | `baglanti` |
 | yangin_teyit | duman alarmı + alev, pencere içinde | — | kritik | `korelasyon` |
 
 Eski kayıtlarda `kural` boştur (NULL); panel rozet göstermez.
@@ -178,8 +178,18 @@ Hareket mesajı uygulanan kuralı da yazar: `Hareket algılandı · gece modu`,
   düğümler "normal" kabul edilir (alarm sürüyorsa bir sonraki eşik üstü ölçüm
   yeni bir olay üretir).
 - Ölçümler (`sensor_gecmis`) her mesajda kaydedilir; histerezis yalnızca olay
-  üretimini etkiler. Hareket olayları histerezissiz (her `deger == 1` bir olay).
-- Eşikler `.env`: `ESIK_DUMAN` (1800), `ESIK_DUMAN_NORMAL` (1600).
+  üretimini etkiler.
+- Hareket (23.11.2026): olay yalnızca `0 → 1` geçişinde üretilir; PIR her 3 sn'lik
+  turda `1` yayınlasa da hareket sürdükçe yeni olay yok. Aynı düğümde son hareket
+  olayından `HAREKET_BEKLEME_SN` (30 sn) geçmeden gelen `0 → 1` de olay üretmez
+  (bekleme düğüm başınadır; seviye kuralı moda göre aynen geçerli). Saf fonksiyon:
+  `hareket_gecisi`. Backend yeniden başlarsa önceki değer 0 sayılır.
+- Çevrimdışı toleransı (23.11.2026): `durum=offline` gelince olay hemen yazılmaz;
+  düğüm `CEVRIMDISI_TOLERANS_SN` (10 sn) içinde `online` yayınlarsa (kısa yeniden
+  bağlanma) olay üretilmez, gelmezse süre dolunca tek `uyari` olayı yazılır.
+  Ölçüm (`sensor_gecmis`) ve panel durumu yine anında güncellenir. 0 = hemen olay.
+- Eşikler `.env`: `ESIK_DUMAN` (1800), `ESIK_DUMAN_NORMAL` (1600), `HAREKET_BEKLEME_SN` (30),
+  `CEVRIMDISI_TOLERANS_SN` (10).
 - Sessiz kalan (mesaj göndermeyen) düğüm olay üretmez; panelde `/api/dugumler`
   kuralıyla çevrimdışı görünür (§6).
 
@@ -324,7 +334,7 @@ Düğüm listesi = `config.DUGUM_KONUMLARI` (hiç veri göndermemiş olsa da) +
   son veri `CEVRIMDISI_SANIYE` (30 sn) içindeyse `true`.
 - `veri_yok`: düğümden hiç kayıt yok (panelde gri, "veri yok"). Böyle bir düğüm
   için "çevrimdışı" olayı ya da e-posta üretilmez; olay yalnızca gelen
-  `durum=offline` mesajından doğar.
+  `durum=offline` mesajından, 10 sn tolerans içinde `online` gelmezse doğar (§4).
 - `son_veri_zamani`: düğümün kendisinden gelen son mesaj (LWT sayılmaz).
 - `konum`: tanımsız düğümde `null`.
 

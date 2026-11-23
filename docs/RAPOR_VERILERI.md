@@ -372,12 +372,12 @@ aşamasında güncellenebilir (yapılandırma dosyasından okunur).
 
 | Olay | Kaynak | Kural | Alarm seviyesi | Sistem tepkisi |
 |------|--------|-------|---------------|----------------|
-| Hareket | PIR | `deger == 1` | orta | Olay kaydı + panelde göster |
+| Hareket | PIR | `0 → 1` geçişi, düğüm başına 30 sn bekleme (23.11.2026) | moda göre (§8) | Olay kaydı + panelde göster |
 | Duman/gaz | MQ-2 | normal → `deger > ESIK_DUMAN` (1800) geçişi | yuksek | Olay kaydı + alarm konusu + e-posta |
 | Duman normale döndü | MQ-2 | alarmda → `deger < ESIK_DUMAN_NORMAL` (1600) geçişi | bilgi | Olay kaydı |
 | Alev | KY-026 | `0 → 1` geçişi | kritik | Olay kaydı + alarm konusu + e-posta (öncelikli) |
 | Alev söndü | KY-026 | `1 → 0` geçişi | bilgi | Olay kaydı |
-| Cihaz çevrimdışı | ESP32 | `durum == "offline"` (LWT veya temiz kapanış) | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
+| Cihaz çevrimdışı | ESP32 | `durum == "offline"` (LWT veya temiz kapanış), 10 sn içinde `online` gelmezse (23.11.2026) | uyari | Olay kaydı + panelde "çevrimdışı" işareti |
 
 Alarm seviyeleri: `bilgi < uyari < orta < yuksek < kritik`
 
@@ -392,7 +392,8 @@ Alarm seviyeleri: `bilgi < uyari < orta < yuksek < kritik`
   düğümler "normal" kabul edilir (alarm sürüyorsa bir sonraki eşik üstü ölçüm
   yeni bir olay üretir).
 - Ölçümler (`sensor_gecmis`) her mesajda kaydedilir; histerezis yalnızca olay
-  üretimini etkiler. Hareket olayları histerezissiz (her `deger == 1` bir olay).
+  üretimini etkiler. Hareket olayı yalnızca `0 → 1` geçişinde ve düğüm başına
+  `HAREKET_BEKLEME_SN` (30 sn) beklemeyle üretilir (23.11.2026, güncel: docs/SOZLESMELER.md §4).
 - Eşikler `.env`: `ESIK_DUMAN` (1800), `ESIK_DUMAN_NORMAL` (1600).
 - Sessiz kalan (mesaj göndermeyen) düğüm olay üretmez; panelde `/api/dugumler`
   kuralıyla çevrimdışı görünür (§6).
@@ -457,7 +458,7 @@ Düğüm listesi = `config.DUGUM_KONUMLARI` (hiç veri göndermemiş olsa da) +
   son veri `CEVRIMDISI_SANIYE` (30 sn) içindeyse `true`.
 - `veri_yok`: düğümden hiç kayıt yok (panelde gri, "veri yok"). Böyle bir düğüm
   için "çevrimdışı" olayı ya da e-posta üretilmez; olay yalnızca gelen
-  `durum=offline` mesajından doğar.
+  `durum=offline` mesajından, 10 sn tolerans içinde `online` gelmezse doğar.
 - `son_veri_zamani`: düğümün kendisinden gelen son mesaj (LWT sayılmaz).
 - `konum`: tanımsız düğümde `null`.
 
@@ -509,23 +510,44 @@ Kod: `backend/app/bildirim.py`, ayarlar: `backend/.env` (şablon: `backend/.env.
 ### Test Sonuçları (Rapor Tablo 6)
 
 Test tarihi: 12 Ekim 2026, 15:39 (otomatik test scripti ile, T1-T8 tek çalıştırma)
+Son çalıştırma: 23 Kasım 2026, 18:22 (T1-T12 + T17-T18 tek çalıştırma, hepsi başarılı;
+hareket kenarı/bekleme ve çevrimdışı toleransı eklendikten sonra). Önceki: 15 Ekim
+2026, 14:49 (T1-T12; 14:37 ve 14:49'da aynı backend açıkken art arda iki kez)
 Yöntem: scripts/test_senaryolari.py — her senaryo broker'a kontrollü mesaj
-gönderir, backend API'sinden sonuç doğrulanır.
+gönderir, backend API'sinden (T9'da ayrıca PATCH ve WebSocket, T11'de mod uçları
+ve WebSocket, T12'de giriş/yetki uçları) sonuç doğrulanır. Script başta güvenlik
+modunu mesai_disi yapar (hareket = orta) ve sonunda kullanıcının önceki moduna (ve
+"değiştiren" kaydına) geri alır. API korumalı olduğundan başta rastgele adlı ve
+parolalı geçici bir admin ve operatör oluşturulur; istekler admin token'ıyla, durum
+geçişleri operatör token'ıyla yapılır; sonda bu kullanıcılar ve giriş kayıtları silinir.
 Ortam: Mosquitto broker + FastAPI backend + SQLite (sahte üreteç kapalı,
 e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfırlandı
 (yedek: backend/yedekler/kampus_20261012_1538.db); olay id'leri bu yüzden küçüktür.
+Gerçek donanım testleri (T13-T16): 23 Kasım 2026, 17:31-18:03, elle. Düğüm `dugum1`
+= Wemos LOLIN S2 Mini (firmware/), sahte üreteç kapalı, mod otomatik (mesai saati).
+Sonuçlar panelden ve veritabanındaki olay kayıtlarından doğrulandı.
 
 | Test | Senaryo | Gönderilen | Beklenen | Sonuç | Durum |
 |------|---------|-----------|----------|-------|-------|
-| T1 | Hareket algılama (PIR) | hareket=1 | orta seviye olay | orta - "Hareket algılandı" | BAŞARILI |
+| T1 | Hareket algılama (PIR) | hareket=1 (mod: mesai_disi) | orta seviye olay | orta - "Hareket algılandı · mesai dışı" | BAŞARILI |
 | T2 | Duman/gaz eşik aşımı (MQ-2) | normal → duman=2500 | yüksek seviye uyarı | yuksek - eşik aşıldı | BAŞARILI |
 | T2b | Duman normal (MQ-2) | duman=400 | alarm oluşmamalı | yeni olay yok | BAŞARILI |
-| T3 | Alev algılama (KY-026) | alev 0 → 1 | kritik olay | kritik - "ALEV ALGILANDI" | BAŞARILI |
+| T3 | Alev algılama (KY-026) | alev 0 → 1 | kritik olay | kritik - "ALEV ALGILANDI" (T2'den 1,5 sn sonra geldiği için ek olarak yangin_teyit oluştu) | BAŞARILI |
 | T4 | MQTT mesaj iletimi | - | mesaj broker→backend | T1-T3 kanıtlıyor | BAŞARILI |
 | T5 | Web arayüzü / API | - | API yanıt veriyor, backend broker'a bağlı | /api/saglik OK, mqtt=bagli | BAŞARILI |
 | T6 | Bildirim (e-posta) | alev=1, hareket=1, duman=2500, alev 0→1 (iki kez) | kritik/yüksekte mail, orta/bilgide yok, bekleme süresinde tekrar yok | 8/8 kontrol geçti (SMTP taklit) | BAŞARILI |
 | T7 | LWT ile çevrimdışı ve geri gelme | online → socket kapatma (DISCONNECT yok) → yeniden bağlanma | /api/dugumler'de çevrimdışı, sonra çevrimiçi | LWT 0,1 sn'de yansıdı, geri bağlanınca anında çevrimiçi | BAŞARILI |
 | T8 | Histerezis (alarm fırtınası önleme) | duman 2100, 2500, 2900, 2300, 1900 → 1700 → 1500; alev 1, 1 → 0 | tek yüksek olay, ölü bantta olay yok, 1600 altında tek bilgi; alev sürerken olay yok, sönünce tek bilgi | 5/5 adım beklenen olay sayısıyla | BAŞARILI |
+| T9 | Olay yaşam döngüsü (alarm onaylama) — 15 Ekim 2026, kimlik doğrulamayla uyarlandı | hareket=1 → operatör token'ıyla PATCH goruldu (gövdede sahte onaylayan) → PATCH cozuldu → geri/aynı geçiş, hatalı gövdeler | durum=yeni; ileri geçişler 200; atlanan adım zamanı dolu; kim/onaylayan = token sahibi, gövdedeki onaylayan yok sayılır; geri 409; olmayan id 404; geçersiz durum ve 301 karakter not 422; WS olay_guncelleme; istatistik değer döner | 13/13 kontrol geçti | BAŞARILI |
+| T10 | Yangın teyidi (korelasyon) — 15 Ekim 2026 | duman 2500 → 2 sn → alev=1; yangın sürerken duman 2900, alev 1→0→1; normale dönüş → yeniden yangın; ters sıra (alev → 2 sn → duman); kural fonksiyonu birim testi | tek yangin_teyit (kritik), iliskili = [duman, alev]; sürerken yeni teyit yok; normalden sonra yeni teyit; ters sırada teyit; pencere dışında (11 sn) teyit yok; mail konusu "YANGIN TEYİTLİ" | 12/12 kontrol geçti | BAŞARILI |
+| T11 | Güvenlik modu ve zamana bağlı hareket kuralı — 15 Ekim 2026 | PUT mesai / mesai_disi / gece + her birinde hareket=1; PUT "tatil" ve boş gövde; hareket_seviyesi("otomatik", t) birim testi | mesai → bilgi (otomatik çözülmüş), mesai_disi → orta, gece → yuksek; WS "mod" mesajı; geçersiz → 422; hafta içi 10:00 bilgi, 20:00 orta, 02:00 yüksek, cumartesi 11:00 orta | 10/10 kontrol geçti (saat eşlemesi 9/9 vaka) | BAŞARILI |
+| T12 | Kimlik doğrulama ve yetkilendirme — 15 Ekim 2026 | token'sız / sahte imzalı / süresi dolmuş istek; yanlış parola, olmayan kullanıcı, pasif kullanıcı; 6 hatalı giriş; operatör ve admin ile PUT mod, /api/kullanicilar; admin kendini pasif yapma; operatör PATCH durum; WS token'sız / bozuk / geçerli | 401 (genel mesaj); 429 + Retry-After; operatör 403, admin 200 + degistiren; 409; kim = operatörün adı; WS 4401; /api/saglik 200; hiçbir yanıtta parola özeti yok | 18/18 kontrol geçti | BAŞARILI |
+| T13 | Güç ve bağlantı (gerçek donanım) — 23 Kasım 2026 | sensörler VBUS 5 V'tan; MQ-2 AO 2x10k, alev DO 10k+20k gerilim bölücüyle ESP32-S2'ye | Wi-Fi + MQTT bağlantısı, 3 sn yayın aralığı | Wi-Fi ve MQTT bağlandı (192.168.1.9:1883, LWT + online), duman → hareket → alev 3 sn'de bir | BAŞARILI |
+| T14 | Hareket algılama (PIR, gerçek donanım) — 23 Kasım 2026 | sensörün önü kapatıldı, sonra önünde el sallandı | kapalıyken olay yok, el sallanınca hareket olayı | kapalıyken 60 sn+ olay yok (17:44:49 → 17:46:18 arası hareket olayı yok); el sallanınca "Hareket algılandı" | BAŞARILI |
+| T15 | Alev algılama (KY-026, gerçek donanım) — 23 Kasım 2026 | çakmak, 20-30 cm mesafe | kritik olay | #2382 kritik - "ALEV ALGILANDI" (17:48:56); çakmak çekilince #2393 bilgi - "Alev söndü" | BAŞARILI |
+| T16 | Duman/gaz eşik aşımı (MQ-2, gerçek donanım) — 23 Kasım 2026 | ısınma sonrası temiz hava → bütan gazı | temizde alarm yok, gazda 1800 eşiği aşılınca yüksek uyarı | temizde ham ~300; gazda 2831 → #2425 yüksek - "Duman/gaz eşiği aşıldı" (17:51:04); 1292'ye inince #2432 bilgi - "normale döndü" | BAŞARILI |
+| T17 | Hareket olay kenarı ve bekleme — 23 Kasım 2026 | hareket 0 → 1; 5 kez 1 → 1; 5 sn sonra 0 → 1; 30 sn sonra 0 → 1; `hareket_gecisi` birim testi | yalnızca 0 → 1'de olay, sürerken olay yok, düğüm başına 30 sn içinde yeni olay yok, seviye moda göre | 6/6 kontrol geçti (orta, tek olay; bekleme içinde 0, sonra 1 olay; birim testi 10/10 adım) | BAŞARILI |
+| T18 | Çevrimdışı toleransı — 23 Kasım 2026 | LWT → ~1 sn sonra online; LWT → geri gelmez | 10 sn içinde geri gelirse olay yok; gelmezse süre dolunca tek uyari | 4/4 kontrol geçti (kısa kopmada 12 sn olay yok; gerçek kopmada 10,3 sn'de tek olay) | BAŞARILI |
 
 #### Notlar
 - Testler test_dugum düğümü ile yapıldı; çalışma sonunda bu düğümün kayıtları
@@ -561,6 +583,134 @@ e-posta bildirimi açık). Veritabanı 15:38'de scripts/db_sifirla.py ile sıfı
   24 yüksek olay üretiyordu. Ölçümlerin hepsi sensor_gecmis'e yazıldı.
 - Gerçek SMTP gönderimi scripts/eposta_test.py ile ayrıca doğrulandı (12 Ekim 2026,
   Gmail SMTP SSL 465).
+- T9 (15 Ekim 2026, 12:51): test_dugum'a hareket=1 gönderildi, #394 orta olay
+  `durum=yeni`, `onaylayan=null` geldi. Doğrulananlar:
+  - PATCH goruldu (operatör + not) → 200, `goruldu_zaman` dolu, `mudahale_zaman` boş
+  - açık bir WebSocket istemcisine `{"tip": "olay_guncelleme"}` mesajı geldi (durum=goruldu)
+  - PATCH cozuldu → 200; atlanan `mudahale_zaman` = `cozuldu_zaman`
+  - olay_adimlari: [goruldu (T9 Operatör, "Kamera kontrol ediliyor"), cozuldu (T9 Operatör)]
+  - cozuldu → goruldu: 409 (`mevcut=cozuldu`); cozuldu → cozuldu: 409
+  - olmayan id: 404; durum=xyz, durum=yeni, boş onaylayan, 41 karakter onaylayan,
+    301 karakter not: hepsi 422
+  - `?durum=acik` listesinde çözülen olay ve çözülmüş kayıt yok
+  - T8'in ürettiği 3 bilgi olayı oluşurken `cozuldu` / `onaylayan=sistem`
+  - /api/istatistik/mudahale → `{acik_sayisi: 4, ort_gorulme_sn: 2.1, ort_cozum_sn: 2.1,
+    cozulen_sayisi: 1}` (açık 4: T1, T2, T3 ve T8'in çözülmemiş alarmları)
+  - Temizlik: olaylar 9, olay_adimlari 2, sensor_gecmis 21 kayıt silindi.
+- T10 (15 Ekim 2026, 13:55): korelasyon penceresi 10 sn (varsayılan).
+  - duman 2500 (#500, yuksek) → 2 sn → alev=1 (#501, kritik) → #502 yangin_teyit,
+    kritik, `kural=korelasyon`, `durum=yeni`, `iliskili=[500, 501]`;
+    `GET /api/olaylar/502` iliskili alanını liste olarak döndürdü. Orijinal duman ve
+    alev olayları `kural=histerezis` ile korundu.
+  - Yangın sürerken (duman alarmda) duman 2900, alev 1 → 0 → 1: yalnızca alev bilgi +
+    alev kritik oluştu, yeni teyit yok (düğüm kilitli).
+  - normale dönüş (duman 400, alev 0) → duman 2500 → 1 sn → alev=1: yeni teyit.
+  - Ters sıra: alev=1 (#512) → 2 sn → duman 2500 (#513) → teyit, `iliskili=[512, 513]`.
+  - Pencere dışı durum, canlı testte pencereyi düşürmek yerine saf `korelasyon()`
+    fonksiyonuyla denendi: 11 sn fark → teyit yok; tam 10 sn → teyit; kilitliyken
+    alevin söndüp yanması → teyit yok; ikisi de normale dönünce → yeni teyit.
+  - `bildirim.mail_olustur` teyit olayı için konu
+    "[KRİTİK] YANGIN TEYİTLİ — dugum1 (Ana Bina · A Kanadı)" ve "İlişkili: #412, #413"
+    satırını üretti (gerçek mail gönderilmedi; test_dugum bildirimden hariç).
+  - T6 yalnızca tekil olay bildirimini ölçtüğü için süreç içinde korelasyonu kapatır
+    ve modu mesai_disi'ye sabitler; teyit maili burada doğrulanır.
+- T11 (15 Ekim 2026, 13:55): açık bir WebSocket istemcisi varken PUT mesai → 200 ve
+  `{"tip": "mod", "veri": {"mod": "mesai", ...}}` mesajı geldi. Her modda hareket=1:
+  - mesai → bilgi, `durum=cozuldu`, `onaylayan=sistem`, `kural=mesai`, "Hareket algılandı · mesai saati"
+  - mesai_disi → orta, `durum=yeni`, `kural=mesai_disi`
+  - gece → yuksek, `kural=gece_modu`, "Hareket algılandı · gece modu"
+  - GET → `{mod: gece, etkin_mod: gece}`; PUT "tatil" ve boş gövde → 422, mod değişmedi.
+  - Otomatik mod, `hareket_seviyesi("otomatik", t)` ile (varsayılan saatler sabitlenerek)
+    9 an için doğrulandı: hafta içi 10:00 mesai/bilgi, 20:00 mesai dışı/orta,
+    02:00 gece/yüksek, cumartesi 11:00 mesai dışı/orta, cumartesi 02:00 gece,
+    sınırlar 08:00 mesai, 18:00 mesai dışı, 23:00 gece, 06:00 mesai dışı.
+  - Elle seçilen mod saatten bağımsız (mesai/mesai_disi/gece → bilgi/orta/yuksek).
+  - Çalışma sonunda mod kullanıcının önceki değerine (otomatik) geri alındı.
+  - Temizlik: olaylar 30, olay_adimlari 2, sensor_gecmis 42 kayıt silindi.
+- T9 uyarlaması (15 Ekim 2026, kimlik doğrulama): `onaylayan` artık token'dan geldiği
+  için "boş onaylayan" ve "41 karakter onaylayan → 422" kontrolleri, "gövdedeki
+  onaylayan yok sayılıyor" kontrolüne dönüştü: gövdede "Sahte Kişi" gönderildi,
+  `olay_adimlari.kim` ve `onaylayan` = geçici operatörün adı ("Test Operatör …").
+  durum=xyz, durum=yeni ve 301 karakter not yine 422.
+- T12 (15 Ekim 2026, 14:49): geçici kullanıcılar `t_admin_<6 hex>` / `t_op_<6 hex>`,
+  parolalar `secrets.token_urlsafe` ile rastgele. Doğrulananlar:
+  - `/api/saglik` token'sız 200; `/api/olaylar` token'sız 401 ("Giriş yapılmamış")
+  - başka bir anahtarla imzalanmış ve rolü "admin" yazılmış token → 401
+  - yanlış parola ve olmayan kullanıcı → ikisi de 401 ve aynı mesaj
+    ("Kullanıcı adı veya parola hatalı")
+  - ayrı, rastgele bir kullanıcı adıyla 5 hatalı deneme 401, 6. deneme 429,
+    `Retry-After: 60` (test operatörü kilitlenmesin diye ayrı ad)
+  - pasif yapılan kullanıcı doğru parolayla 401
+  - operatör PUT mod → 403 ve mod değişmedi; admin PUT mod → 200,
+    `degistiren` = admin adı; operatörün açık WS bağlantısına gelen `mod` mesajı
+    da `degistiren` taşıdı
+  - `/api/kullanicilar` operatör 403, admin 200; admin kendini pasif yapamaz 409;
+    7 karakterlik parolayla kullanıcı ekleme 422
+  - son aktif admin kuralı (operatöre düşürme ve pasif yapma → `son_admin`) geçici
+    bir veritabanında birim testle (canlı DB'de başka admin olabileceği için)
+  - operatör PATCH cozuldu (gövdede sahte onaylayan) → `olay_adimlari.kim` =
+    operatörün adı
+  - süresi dolmuş token **canlı backend'e karşı**: `.env`'deki `JWT_GIZLI_ANAHTAR`
+    ile süreç içinde imzalanan geçerli token 200 aldı (anahtarın backend'le aynı
+    olduğu kanıtı), aynı kullanıcı için `exp` 60 sn önce olan token 401
+  - WS token'sız ve bozuk token → kapanış kodu 4401; geçerli token → bağlantı açık
+  - testteki 87 API yanıt gövdesinin hiçbirinde `"parola_hash"`, `"tuz"` ya da
+    geçici parolalar yok
+  - Temizlik: olaylar 31, olay_adimlari 3, sensor_gecmis 43 kayıt; 2 geçici
+    kullanıcı ve 3 giriş kaydı silindi; mod ve "değiştiren" kaydı eski haline döndü.
+- Not (15 Ekim 2026, 14:35): ilk T1-T12 çalıştırmasında T8 ve T10 başarısız oldu.
+  Neden kod değil ortamdı: backend yeniden başlatılırken eski `--reload`
+  sürecinin yetim worker'ı açık kalmış, iki backend aynı MQTT client_id
+  ("kampus-backend") ile broker'da birbirini düşürüyordu; bellekteki histerezis
+  ve korelasyon durumu iki süreç arasında bölündü. Yetim süreç kapatılınca T1-T12
+  iki ardışık çalıştırmada da başarılı oldu.
+- Göç (15 Ekim 2026, kimlik doğrulama): backend açılışta `kullanicilar` ve
+  `giris_kayitlari` tablolarını oluşturdu; mevcut olaylar değişmedi.
+- Göç (15 Ekim 2026, akıllı kurallar): backend yeniden yüklenince olaylar tablosuna `kural` ve
+  `iliskili` kolonları eklendi (ALTER TABLE, mevcut kayıtlar NULL), `ayarlar` tablosu
+  oluşturuldu; mevcut olaylar değişmedi.
+- Göç (15 Ekim 2026, 12:50): ilk açılışta olaylar tablosuna 6 kolon eklendi; mevcut
+  4 orta (hareket) kayıt `cozuldu` / `sistem (göç)`, 3 uyari kayıt `cozuldu` /
+  `sistem` oldu. Göç öncesi yedek: backend/yedekler/kampus_20261015_1238_goconcesi.db.
+- T13-T16 (23 Kasım 2026, gerçek donanım): bağlantı şeması ve bölücü hesapları
+  firmware/README.md ve RAPOR_VERILERI.md §10'da. Ölçümler (sensor_gecmis, dugum1):
+  - MQ-2 temiz hava, ısınma sonrası: 17:40-17:48 arası 156 ölçümde 285-352,
+    ortalama 312. Gaz verilince 3 sn'lik turlarda 276 → 383 → 438 → 397 → 319 →
+    2831 → 3367 (tepe) → 2779 → 1854 → 2807 → 1722 → 1292. Histerezis sayesinde
+    tek yüksek (2831) ve tek bilgi (1292 < 1600) olayı oluştu, aradaki
+    dalgalanma yeni alarm üretmedi.
+  - Alev: alev yokken DO sürekli HIGH (alev=0); çakmakla kritik olay (17:48:56),
+    17:49:27'de "Alev söndü" (bilgi).
+  - PIR: mesai saatinde hareket = bilgi seviyesi, otomatik çözülmüş olay
+    (kural=mesai). Test süresince sensör çoğu 3 sn'lik turda
+    hareket bildirdi (dakikada ~15-20 olay). Çözüm (23.11.2026, 18:17): hareket olayı
+    artık yalnızca 0 → 1 geçişinde ve düğüm başına 30 sn beklemeyle (T17); sonraki
+    5,5 dk'da kart 65 kez hareket=1 yayınladı, 2 hareket olayı oluştu.
+  - Bağlantı: test süresince broker'da 27 kez "Cihaz çevrimdışı" (LWT) olayı
+    görüldü; kart her seferinde 1-2 sn içinde yeniden bağlanıp `online` yayınladı
+    (broker kaydı: "session taken over" / "connection closed by client"; kart yayın
+    zaman aşımında bağlantıyı kendisi yeniliyor). Kopma anındaki yayınlar
+    "YAYINLANAMADI" ile düşebiliyor.
+    Çözüm (23.11.2026, 18:14): neden firmware'deki 2 sn'lik MQTT komut zaman aşımıydı
+    (256dpi/MQTT, PUBACK bu sürede gelmezse bağlantıyı kapatır). 8 sn'ye çıkarıldı
+    (QoS 1 aynı, Wi-Fi modem uykusu zaten kapalı: `WiFi.setSleep(false)`).
+    Yeni firmware 18:14:21'de bağlandı; 18:14-18:21 arası ~7 dk'da 0 yeniden
+    bağlanma, 387 yayının hiçbiri başarısız değil (seri kayıt + broker kaydı).
+    `WIFI_DUSUK_GUC` gerekmedi. Ayrıca backend'e 10 sn çevrimdışı toleransı
+    eklendi (T18): kısa kopmalar artık "Cihaz çevrimdışı" olayı üretmez.
+- T17 (23 Kasım 2026, 18:22): mod mesai_disi. test_dugum'a 0 → 1 → tek orta olay;
+  ardından 5 kez hareket=1 (hareket sürüyor) → olay yok; 5 sn sonra 0 → 1 (bekleme
+  içinde) → olay yok; bekleme dolunca 0 → 1 → yeni olay. `hareket_gecisi` saf
+  fonksiyonu 10 adımlık diziyle (sürme, bekleme içinde/sonunda geçiş, bekleme dolduktan
+  sonra süren 1 → olay yok) ve başka düğümün beklemeden etkilenmediğiyle doğrulandı.
+  Bekleme canlı backend'de geçerli olduğundan hareket gönderen tüm testler
+  (T1, T9, T11, T12, T17) önce 0 gönderir, gerekirse 30 sn bekler (script ~1 dk uzadı).
+  T6 süreç içi hareket durumunu da temiz başlatır.
+- T18 (23 Kasım 2026, 18:22): tolerans 10 sn. a) LWT'li client socket'i DISCONNECT
+  göndermeden kapattı → broker LWT yayınladı (panel çevrimdışı) → ~1 sn sonra yeniden
+  bağlanıp online → 12 sn boyunca çevrimdışı olayı yok, panel çevrimiçi. b) aynı kopma,
+  geri bağlanmadan: 5 sn'de olay yok, 10,3 sn'de tek "uyari - Cihaz çevrimdışı".
+  T7 (LWT'nin panele 0,0 sn'de yansıması) değişmedi.
 
 ---
 
@@ -754,8 +904,18 @@ ayarı: `MQ2_AKTIF 1`, `ALEV_AKTIF 1` (pinler 7/3/5 ve `ALEV_AKTIF_DUSUK` aynı)
 | T15 | Alev: çakmak 20–30 cm | kritik "ALEV ALGILANDI" (#2382, 23.11.2026 17:48) | BAŞARILI |
 | T16 | Duman: temizde ~300, bütan gazı | 2831 → yüksek "Duman/gaz eşiği aşıldı" (#2425, 23.11.2026 17:51) | BAŞARILI |
 
+### Bağlantı kararlılığı ve olay azaltma (23.11.2026)
+
+İlk donanım testinde iki sorun görüldü ve aynı gün çözüldü:
+
+| Sorun | Neden | Çözüm | Sonuç |
+|---|---|---|---|
+| 30 dk'da 27 MQTT yeniden bağlanma ("Cihaz çevrimdışı" olayı) | firmware MQTT komut zaman aşımı 2 sn; PUBACK gecikince kütüphane (256dpi/MQTT) bağlantıyı kapatıyor | `MQTT_ZAMAN_ASIMI_MS` 2000 → 8000 (QoS 1 aynı, `WiFi.setSleep(false)` zaten açık) | ~7 dk'da 0 yeniden bağlanma, 387/387 yayın başarılı; `WIFI_DUSUK_GUC` gerekmedi |
+| Kısa kopmalar panelde uyarı olayı | her LWT "offline" anında olay | backend `CEVRIMDISI_TOLERANS_SN` = 10: bu sürede `online` gelirse olay yok | T18 BAŞARILI; gerçek kopma 10 sn sonra yine tek olay |
+| PIR dakikada ~15-20 hareket olayı | her `hareket=1` yayını bir olaydı | olay yalnızca 0 → 1 geçişinde, düğüm başına `HAREKET_BEKLEME_SN` = 30 bekleme; seviye moda göre aynı | T17 BAŞARILI; kartta 5,5 dk'da 65 kez hareket=1 → 2 olay |
+
 Durum (23.11.2026): üç sensör açık ve gerçek donanımla doğrulandı. Gerçek kart
-`dugum1` iken sahte üreteç `--dugumler dugum2,dugum3` ile çalışır. Açık konu:
-test süresince kart 27 kez bağlantıyı yenileyip 1–2 sn'de geri bağlandı (yayın
-zaman aşımı; bkz. TEST_SONUCLARI notları). Kablolama sorunları için `TESHIS_MODU`
+`dugum1` iken sahte üreteç `--dugumler dugum2,dugum3` ile çalışır. İlk testte
+kart 27 kez bağlantıyı yenileyip 1–2 sn'de geri bağlanıyordu (yayın
+zaman aşımı) — aynı gün çözüldü, yukarıdaki tablo. Kablolama sorunları için `TESHIS_MODU`
 (ağsız, GPIO 1–14 dijital + GPIO 1–10 analog, 500 ms).

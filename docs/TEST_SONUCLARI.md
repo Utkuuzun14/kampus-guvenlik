@@ -1,8 +1,9 @@
 # Test Sonuçları (Rapor Tablo 6)
 
 Test tarihi: 12 Ekim 2026, 15:39 (otomatik test scripti ile, T1-T8 tek çalıştırma)
-Son çalıştırma: 15 Ekim 2026, 14:49 (T1-T12 tek çalıştırma, hepsi başarılı; 14:37 ve
-14:49'da aynı backend açıkken art arda iki kez)
+Son çalıştırma: 23 Kasım 2026, 18:22 (T1-T12 + T17-T18 tek çalıştırma, hepsi başarılı;
+hareket kenarı/bekleme ve çevrimdışı toleransı eklendikten sonra). Önceki: 15 Ekim
+2026, 14:49 (T1-T12; 14:37 ve 14:49'da aynı backend açıkken art arda iki kez)
 Yöntem: scripts/test_senaryolari.py — her senaryo broker'a kontrollü mesaj
 gönderir, backend API'sinden (T9'da ayrıca PATCH ve WebSocket, T11'de mod uçları
 ve WebSocket, T12'de giriş/yetki uçları) sonuç doğrulanır. Script başta güvenlik
@@ -36,6 +37,8 @@ Sonuçlar panelden ve veritabanındaki olay kayıtlarından doğrulandı.
 | T14 | Hareket algılama (PIR, gerçek donanım) — 23 Kasım 2026 | sensörün önü kapatıldı, sonra önünde el sallandı | kapalıyken olay yok, el sallanınca hareket olayı | kapalıyken 60 sn+ olay yok (17:44:49 → 17:46:18 arası hareket olayı yok); el sallanınca "Hareket algılandı" | BAŞARILI |
 | T15 | Alev algılama (KY-026, gerçek donanım) — 23 Kasım 2026 | çakmak, 20-30 cm mesafe | kritik olay | #2382 kritik - "ALEV ALGILANDI" (17:48:56); çakmak çekilince #2393 bilgi - "Alev söndü" | BAŞARILI |
 | T16 | Duman/gaz eşik aşımı (MQ-2, gerçek donanım) — 23 Kasım 2026 | ısınma sonrası temiz hava → bütan gazı | temizde alarm yok, gazda 1800 eşiği aşılınca yüksek uyarı | temizde ham ~300; gazda 2831 → #2425 yüksek - "Duman/gaz eşiği aşıldı" (17:51:04); 1292'ye inince #2432 bilgi - "normale döndü" | BAŞARILI |
+| T17 | Hareket olay kenarı ve bekleme — 23 Kasım 2026 | hareket 0 → 1; 5 kez 1 → 1; 5 sn sonra 0 → 1; 30 sn sonra 0 → 1; `hareket_gecisi` birim testi | yalnızca 0 → 1'de olay, sürerken olay yok, düğüm başına 30 sn içinde yeni olay yok, seviye moda göre | 6/6 kontrol geçti (orta, tek olay; bekleme içinde 0, sonra 1 olay; birim testi 10/10 adım) | BAŞARILI |
+| T18 | Çevrimdışı toleransı — 23 Kasım 2026 | LWT → ~1 sn sonra online; LWT → geri gelmez | 10 sn içinde geri gelirse olay yok; gelmezse süre dolunca tek uyari | 4/4 kontrol geçti (kısa kopmada 12 sn olay yok; gerçek kopmada 10,3 sn'de tek olay) | BAŞARILI |
 
 ## Notlar
 - Testler test_dugum düğümü ile yapıldı; çalışma sonunda bu düğümün kayıtları
@@ -171,9 +174,31 @@ Sonuçlar panelden ve veritabanındaki olay kayıtlarından doğrulandı.
     17:49:27'de "Alev söndü" (bilgi).
   - PIR: mesai saatinde hareket = bilgi seviyesi, otomatik çözülmüş olay
     (kural=mesai). Test süresince sensör çoğu 3 sn'lik turda
-    hareket bildirdi (dakikada ~15-20 olay); süre/hassasiyet potları ayarlanacak.
+    hareket bildirdi (dakikada ~15-20 olay). Çözüm (23.11.2026, 18:17): hareket olayı
+    artık yalnızca 0 → 1 geçişinde ve düğüm başına 30 sn beklemeyle (T17); sonraki
+    5,5 dk'da kart 65 kez hareket=1 yayınladı, 2 hareket olayı oluştu.
   - Bağlantı: test süresince broker'da 27 kez "Cihaz çevrimdışı" (LWT) olayı
     görüldü; kart her seferinde 1-2 sn içinde yeniden bağlanıp `online` yayınladı
     (broker kaydı: "session taken over" / "connection closed by client"; kart yayın
     zaman aşımında bağlantıyı kendisi yeniliyor). Kopma anındaki yayınlar
-    "YAYINLANAMADI" ile düşebiliyor; bağlantı kararlılığı ayrıca iyileştirilecek.
+    "YAYINLANAMADI" ile düşebiliyor.
+    Çözüm (23.11.2026, 18:14): neden firmware'deki 2 sn'lik MQTT komut zaman aşımıydı
+    (256dpi/MQTT, PUBACK bu sürede gelmezse bağlantıyı kapatır). 8 sn'ye çıkarıldı
+    (QoS 1 aynı, Wi-Fi modem uykusu zaten kapalı: `WiFi.setSleep(false)`).
+    Yeni firmware 18:14:21'de bağlandı; 18:14-18:21 arası ~7 dk'da 0 yeniden
+    bağlanma, 387 yayının hiçbiri başarısız değil (seri kayıt + broker kaydı).
+    `WIFI_DUSUK_GUC` gerekmedi. Ayrıca backend'e 10 sn çevrimdışı toleransı
+    eklendi (T18): kısa kopmalar artık "Cihaz çevrimdışı" olayı üretmez.
+- T17 (23 Kasım 2026, 18:22): mod mesai_disi. test_dugum'a 0 → 1 → tek orta olay;
+  ardından 5 kez hareket=1 (hareket sürüyor) → olay yok; 5 sn sonra 0 → 1 (bekleme
+  içinde) → olay yok; bekleme dolunca 0 → 1 → yeni olay. `hareket_gecisi` saf
+  fonksiyonu 10 adımlık diziyle (sürme, bekleme içinde/sonunda geçiş, bekleme dolduktan
+  sonra süren 1 → olay yok) ve başka düğümün beklemeden etkilenmediğiyle doğrulandı.
+  Bekleme canlı backend'de geçerli olduğundan hareket gönderen tüm testler
+  (T1, T9, T11, T12, T17) önce 0 gönderir, gerekirse 30 sn bekler (script ~1 dk uzadı).
+  T6 süreç içi hareket durumunu da temiz başlatır.
+- T18 (23 Kasım 2026, 18:22): tolerans 10 sn. a) LWT'li client socket'i DISCONNECT
+  göndermeden kapattı → broker LWT yayınladı (panel çevrimdışı) → ~1 sn sonra yeniden
+  bağlanıp online → 12 sn boyunca çevrimdışı olayı yok, panel çevrimiçi. b) aynı kopma,
+  geri bağlanmadan: 5 sn'de olay yok, 10,3 sn'de tek "uyari - Cihaz çevrimdışı".
+  T7 (LWT'nin panele 0,0 sn'de yansıması) değişmedi.
