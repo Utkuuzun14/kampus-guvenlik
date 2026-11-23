@@ -29,7 +29,7 @@ biçimde yayınlar (`docs/SOZLESMELER.md` §2–§3); backend ve panel değişme
 - **Isınma:** PIR ve MQ-2 açılıştan sonraki ilk 60 sn yayınlanmaz (seri çıktıda geri sayım).
   Bu sürede yalnızca `online` gider; panel düğümü 30 sn sonra bir süre "çevrimdışı" gösterebilir, ısınma bitince düzelir.
 - **Kapalı sensör** (`pinler.h`'de `*_AKTIF 0`) hiç okunmaz, hiç yayınlanmaz. Şu an:
-  `PIR_AKTIF 1`, `MQ2_AKTIF 0`, `ALEV_AKTIF 0` (MQ-2 ve alevin besleme sorunu çözülünce 1 yapılacak).
+  `PIR_AKTIF 1`, `MQ2_AKTIF 1`, `ALEV_AKTIF 1` (üçü de 5 V besleme + gerilim bölücüyle, 23.11.2026).
 - Sahte üretecin demo kontrol konusu (`kampus/demo/...`) gerçek kartta yoktur (sözleşme §2).
 - Fark: sahte üreteç MQTT 5 ile bağlanır, kart MQTT 3.1.1 ile; JSON'da boşluk yoktur
   (Python `json.dumps` boşluklu yazar). Backend her ikisini aynı işler.
@@ -38,34 +38,47 @@ biçimde yayınlar (`docs/SOZLESMELER.md` §2–§3); backend ve panel değişme
 
 | Sensör | Pin | Kart pini |
 |---|---|---|
-| **MQ-2** | VCC | 3V3 |
+|| **MQ-2** | VCC | VBUS (5 V) |
 | | GND | GND |
-| | AO | GPIO 3 (ADC1) |
-| **Alev (KY-026)** | VCC | 3V3 |
+| | AO | 10 kΩ → GPIO 3 (ADC1), GPIO 3 → 10 kΩ → GND |
+| **Alev (KY-026)** | VCC | VBUS (5 V) |
 | | GND | GND |
-| | DO | GPIO 5 |
+| | DO | 10 kΩ → GPIO 5, GPIO 5 → 20 kΩ → GND |
 | **PIR (HC-SR501)** | VCC | VBUS (5 V) |
 | | GND | GND |
-| | OUT | GPIO 7 |
+| | OUT | GPIO 7 (doğrudan) |
 | Dahili LED | — | GPIO 15 (aktif HIGH) |
 
 Kartın arkasındaki çift sıra pinlerde **DIŞ sıra** kullanılıyor.
 
+**Neden 5 V ve bölücü:** 3V3 hattı MQ-2'yi (ısıtıcısı 5 V için tasarlanmış, ~150 mA)
+ve alev modülünü besleyemedi; üç sensör de VBUS'tan (USB 5 V) beslenir. 5 V'la
+beslenen modüllerin çıkışı 5 V'a çıkabildiği, ESP32-S2 pinleri ise en fazla 3,3 V
+kabul ettiği için çıkışlar bölünür:
+- MQ-2 AO: 2×10 kΩ → 5 V × 1/2 = en fazla **2,5 V** (11 dB ADC aralığı içinde).
+  Backend'in duman eşiği (1800) bu ölçekteki ham değerdir.
+- Alev DO: 10 kΩ + 20 kΩ → 5 V × 20/30 ≈ **3,3 V** (HIGH = alev yok, LOW = alev).
+- PIR OUT: HC-SR501 kart üstü 3,3 V regülatörüyle çıkış verir, bölücü gerekmez.
+
 ```
         LOLIN S2 Mini
      ┌──────────────────┐
-     │  3V3 ───────┬────┼── MQ-2 VCC
-     │             └────┼── Alev VCC
-     │  VBUS (5V) ──────┼── PIR VCC
+     │  VBUS (5V) ──────┼── MQ-2 VCC, Alev VCC, PIR VCC
      │  GND ────────────┼── MQ-2 GND, Alev GND, PIR GND
-     │  GPIO 3 ◄────────┼── MQ-2 AO
-     │  GPIO 5 ◄────────┼── Alev DO
+     │  GPIO 3 ◄──┬─────┼── 10k ── MQ-2 AO
+     │            └─────┼── 10k ── GND
+     │  GPIO 5 ◄──┬─────┼── 10k ── Alev DO
+     │            └─────┼── 20k ── GND
      │  GPIO 7 ◄────────┼── PIR OUT
      │  GPIO 15 (LED)   │
      └──────────────────┘
 ```
 
-**LED:** bağlanırken yavaş yanıp söner (1 Hz), Wi-Fi + MQTT bağlıyken sabit yanar,
+**Ölçülen değerler (23.11.2026):** MQ-2 temiz havada, ısınma sonrası ham ~300
+(285–352); bütan gazında 2831–3367. Alev DO alev yokken HIGH, çakmakla (20–30 cm)
+LOW. Testler: docs/TEST_SONUCLARI.md T13–T16.
+
+*LED:** bağlanırken yavaş yanıp söner (1 Hz), Wi-Fi + MQTT bağlıyken sabit yanar,
 hareket/alev/duman eşiği anında kısa hızlı yanıp söner.
 
 ## 1. PlatformIO Core kurulumu

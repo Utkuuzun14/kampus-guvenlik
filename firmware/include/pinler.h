@@ -12,10 +12,10 @@
 #define ALEV_AKTIF_DUSUK true
 
 // --- Sensör açma/kapama (0 = hiç okunmaz, hiç yayınlanmaz) ---
-// MQ-2 ve alevin besleme sorunu çözülünce 1 yapılacak.
+// MQ-2 AO 2x10k bölücüyle (maks 2.5 V), alev DO 10k+20k bölücüyle bağlı.
 #define PIR_AKTIF   1
-#define MQ2_AKTIF   0
-#define ALEV_AKTIF  0
+#define MQ2_AKTIF   1
+#define ALEV_AKTIF  1
 
 // --- ADC (MQ-2) ---
 // S2'nin varsayılanı 13 bit; sözleşme 0–4095 (12 bit) bekler.
