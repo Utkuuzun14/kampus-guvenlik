@@ -10,8 +10,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dotenv import load_dotenv
 
-# .env dosyasını yükle (backend/.env)
-load_dotenv()
+# .env dosyasını yükle (backend/.env). Yol açıkça verilir: yolsuz load_dotenv()
+# `python -c`, REPL ve bazı debugger'larda .env'yi çalışma dizininde arar ve
+# proje kökünden çalışınca bulamaz.
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 # ---------------- MQTT ayarları ----------------
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
